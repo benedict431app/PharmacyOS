@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Staff Management - PharmaSaaS</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f7fa; }
+        .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 15px 20px; }
+        .container { max-width: 1200px; margin: 20px auto; padding: 0 20px; }
+        .card { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #eee; }
+        th { background: #f8f9fa; font-weight: 600; }
+        .btn { padding: 8px 16px; border: none; border-radius: 5px; cursor: pointer; }
+        .btn-success { background: #48bb78; color: white; }
+        .btn-danger { background: #f56565; color: white; }
+        .badge-active { background: #48bb78; color: white; padding: 4px 8px; border-radius: 3px; font-size: 12px; }
+        .badge-pending { background: #ed8936; color: white; padding: 4px 8px; border-radius: 3px; font-size: 12px; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>👨‍⚕️ Staff Management</h1>
+        <a href="/dashboard" style="color: white; text-decoration: none;">← Back to Dashboard</a>
+    </div>
+    
+    <div class="container">
+        <div class="card">
+            <h3>Staff Members</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Email</th>
+                        <th>Role</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Admin User</td>
+                        <td>admin@demo.com</td>
+                        <td>Admin</td>
+                        <td><span class="badge-active">Active</span></td>
+                        <td>-</td>
+                    </tr>
+                    <tr>
+                        <td>Pharmacist User</td>
+                        <td>pharmacist@demo.com</td>
+                        <td>Pharmacist</td>
+                        <td><span class="badge-pending">Pending Approval</span></td>
+                        <td>
+                            <button class="btn btn-success">Approve</button>
+                            <button class="btn btn-danger">Reject</button>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        
+        <div class="card">
+            <h3>Add New Pharmacist</h3>
+            <p>Pharmacists can handle sales and inventory, but require admin approval to access the system.</p>
+            <p style="margin-top: 10px; color: #666;">To add a new pharmacist, have them register with your organization code, then approve their account here.</p>
+        </div>
+    </div>
+</body>
+</html>

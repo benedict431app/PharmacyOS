@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+
+{% block title %}{% if drug %}Edit{% else %}Add{% endif %} Drug - PharmaCare{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">{% if drug %}Edit Drug{% else %}Add New Drug{% endif %}</h1>
+</div>
+
+<div class="card">
+    <form method="post" action="{% if drug %}/inventory/edit/{{ drug.id }}{% else %}/inventory/add{% endif %}">
+        <div class="grid-2">
+            <div class="form-group">
+                <label class="form-label">Drug Name *</label>
+                <input type="text" name="name" class="form-input" value="{{ drug.name if drug else '' }}" required data-testid="input-drug-name">
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Generic Name</label>
+                <input type="text" name="generic_name" class="form-input" value="{{ drug.generic_name if drug else '' }}" data-testid="input-generic-name">
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Manufacturer</label>
+                <input type="text" name="manufacturer" class="form-input" value="{{ drug.manufacturer if drug else '' }}" data-testid="input-manufacturer">
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Form *</label>
+                <select name="form" class="form-input" required data-testid="select-form">
+                    <option value="">Select form</option>
+                    <option value="tablet" {% if drug and drug.form.value == 'tablet' %}selected{% endif %}>Tablet</option>
+                    <option value="capsule" {% if drug and drug.form.value == 'capsule' %}selected{% endif %}>Capsule</option>
+                    <option value="syrup" {% if drug and drug.form.value == 'syrup' %}selected{% endif %}>Syrup</option>
+                    <option value="injection" {% if drug and drug.form.value == 'injection' %}selected{% endif %}>Injection</option>
+                    <option value="cream" {% if drug and drug.form.value == 'cream' %}selected{% endif %}>Cream</option>
+                    <option value="ointment" {% if drug and drug.form.value == 'ointment' %}selected{% endif %}>Ointment</option>
+                    <option value="drops" {% if drug and drug.form.value == 'drops' %}selected{% endif %}>Drops</option>
+                    <option value="inhaler" {% if drug and drug.form.value == 'inhaler' %}selected{% endif %}>Inhaler</option>
+                    <option value="powder" {% if drug and drug.form.value == 'powder' %}selected{% endif %}>Powder</option>
+                    <option value="other" {% if drug and drug.form.value == 'other' %}selected{% endif %}>Other</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Strength</label>
+                <input type="number" step="0.01" name="strength" class="form-input" value="{{ drug.strength if drug else '' }}" data-testid="input-strength">
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Strength Unit</label>
+                <select name="strength_unit" class="form-input" data-testid="select-strength-unit">
+                    <option value="">Select unit</option>
+                    <option value="mg" {% if drug and drug.strength_unit and drug.strength_unit.value == 'mg' %}selected{% endif %}>mg</option>
+                    <option value="g" {% if drug and drug.strength_unit and drug.strength_unit.value == 'g' %}selected{% endif %}>g</option>
+                    <option value="ml" {% if drug and drug.strength_unit and drug.strength_unit.value == 'ml' %}selected{% endif %}>ml</option>
+                    <option value="mcg" {% if drug and drug.strength_unit and drug.strength_unit.value == 'mcg' %}selected{% endif %}>mcg</option>
+                    <option value="iu" {% if drug and drug.strength_unit and drug.strength_unit.value == 'iu' %}selected{% endif %}>IU</option>
+                    <option value="percentage" {% if drug and drug.strength_unit and drug.strength_unit.value == 'percentage' %}selected{% endif %}>%</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Category</label>
+                <select name="category_id" class="form-input" data-testid="select-category">
+                    <option value="">Select category</option>
+                    {% for cat in categories %}
+                    <option value="{{ cat.id }}" {% if drug and drug.category_id == cat.id %}selected{% endif %}>{{ cat.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Supplier</label>
+                <select name="supplier_id" class="form-input" data-testid="select-supplier">
+                    <option value="">Select supplier</option>
+                    {% for sup in suppliers %}
+                    <option value="{{ sup.id }}" {% if drug and drug.supplier_id == sup.id %}selected{% endif %}>{{ sup.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Price *</label>
+                <input type="number" step="0.01" name="price" class="form-input" value="{{ drug.price if drug else '' }}" required data-testid="input-price">
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Reorder Level</label>
+                <input type="number" name="reorder_level" class="form-input" value="{{ drug.reorder_level if drug else 10 }}" data-testid="input-reorder-level">
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Barcode</label>
+                <input type="text" name="barcode" class="form-input" value="{{ drug.barcode if drug else '' }}" data-testid="input-barcode">
+            </div>
+        </div>
+        
+        <div class="form-group">
+            <label class="form-label">Description</label>
+            <textarea name="description" class="form-input" data-testid="input-description">{{ drug.description if drug else '' }}</textarea>
+        </div>
+        
+        <div class="form-group">
+            <label class="form-label">Usage Instructions</label>
+            <textarea name="usage_instructions" class="form-input" data-testid="input-usage">{{ drug.usage_instructions if drug else '' }}</textarea>
+        </div>
+        
+        <div class="form-group">
+            <label class="form-label">Side Effects</label>
+            <textarea name="side_effects" class="form-input" data-testid="input-side-effects">{{ drug.side_effects if drug else '' }}</textarea>
+        </div>
+        
+        <div class="mt-4">
+            <button type="submit" class="btn btn-primary" data-testid="button-submit-drug">{% if drug %}Update Drug{% else %}Add Drug{% endif %}</button>
+            <a href="/inventory" class="btn" style="background: var(--bg-main); margin-left: 0.5rem;">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

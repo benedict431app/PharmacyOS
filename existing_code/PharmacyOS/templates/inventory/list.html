@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+
+{% block title %}Inventory - PharmaCare{% endblock %}
+
+{% block content %}
+<div class="flex-between mb-4">
+    <div class="page-header">
+        <h1 class="page-title" data-testid="title-inventory">Inventory Management</h1>
+        <p class="page-subtitle">Manage your drug inventory and stock levels</p>
+    </div>
+    <div>
+        <a href="/inventory/add" class="btn btn-primary" data-testid="button-add-drug">+ Add Drug</a>
+    </div>
+</div>
+
+<div class="search-box">
+    <form method="get" action="/inventory">
+        <input type="text" name="search" class="form-input" placeholder="Search drugs..." value="{{ search }}" data-testid="input-search-drugs">
+    </form>
+</div>
+
+<div class="card">
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Generic Name</th>
+                <th>Form</th>
+                <th>Category</th>
+                <th>Stock</th>
+                <th>Price</th>
+                <th>Status</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% if drugs %}
+                {% for drug in drugs %}
+                <tr data-testid="drug-row-{{ drug.id }}">
+                    <td style="font-weight: 500;">{{ drug.name }}</td>
+                    <td style="color: var(--text-muted);">{{ drug.generic_name or '-' }}</td>
+                    <td style="text-transform: capitalize;">{{ drug.form.value }}</td>
+                    <td>{{ drug.category.name if drug.category else '-' }}</td>
+                    <td class="font-mono">{{ drug.total_stock }}</td>
+                    <td class="font-mono">${{ "%.2f"|format(drug.price) }}</td>
+                    <td>
+                        {% if drug.total_stock == 0 %}
+                        <span class="badge badge-danger">Out of Stock</span>
+                        {% elif drug.total_stock <= drug.reorder_level %}
+                        <span class="badge badge-warning">Low Stock</span>
+                        {% else %}
+                        <span class="badge badge-success">In Stock</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <a href="/inventory/edit/{{ drug.id }}" class="btn btn-sm btn-secondary" data-testid="button-edit-{{ drug.id }}">Edit</a>
+                        <form method="post" action="/inventory/delete/{{ drug.id }}" style="display: inline;">
+                            <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Are you sure?')" data-testid="button-delete-{{ drug.id }}">Delete</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            {% else %}
+                <tr>
+                    <td colspan="8" style="text-align: center; padding: 2rem; color: var(--text-muted);">No drugs found</td>
+                </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

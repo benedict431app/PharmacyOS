@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Customer Management - PharmaSaaS</title>
+    <meta name="viewport" content="width=device-width, initial-0">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f7fa; }
+        .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 15px 20px; }
+        .container { max-width: 1200px; margin: 20px auto; padding: 0 20px; }
+        .card { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #eee; }
+        th { background: #f8f9fa; font-weight: 600; }
+        .btn { padding: 8px 16px; border: none; border-radius: 5px; cursor: pointer; font-size: 14px; }
+        .btn-primary { background: #667eea; color: white; }
+        .btn-success { background: #48bb78; color: white; }
+        .btn-warning { background: #ed8936; color: white; }
+        .badge-credit { background: #ed8936; color: white; padding: 4px 8px; border-radius: 3px; font-size: 12px; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>👥 Customer Management (CRM)</h1>
+        <a href="/dashboard" style="color: white; text-decoration: none;">← Back to Dashboard</a>
+    </div>
+    
+    <div class="container">
+        <div class="card">
+            <h3>Customer List</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Phone</th>
+                        <th>Email</th>
+                        <th>Credit Status</th>
+                        <th>Balance</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>John Doe</td>
+                        <td>+1234567001</td>
+                        <td>john@example.com</td>
+                        <td><span class="badge-credit">Credit Enabled</span></td>
+                        <td>$0.00 / $500.00</td>
+                        <td>
+                            <button class="btn btn-primary">View</button>
+                            <button class="btn btn-success">Record Payment</button>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>Jane Smith</td>
+                        <td>+1234567002</td>
+                        <td>jane@example.com</td>
+                        <td><span class="badge-credit">Credit Enabled</span></td>
+                        <td>$0.00 / $1,000.00</td>
+                        <td>
+                            <button class="btn btn-primary">View</button>
+                            <button class="btn btn-success">Record Payment</button>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        
+        <div class="card">
+            <h3>💳 Credit Management</h3>
+            <p>View and manage customer credit accounts, track outstanding balances, and record payments here.</p>
+            <p style="margin-top: 10px; color: #666;">This feature allows you to sell on credit to trusted customers and track their payment history.</p>
+        </div>
+    </div>
+</body>
+</html>

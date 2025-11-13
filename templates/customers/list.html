@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block title %}Customers - PharmaCare{% endblock %}
+
+{% block content %}
+<div class="flex-between mb-4">
+    <div class="page-header">
+        <h1 class="page-title" data-testid="title-customers">Customer Management</h1>
+        <p class="page-subtitle">Manage customer information and records</p>
+    </div>
+    <div>
+        <a href="/customers/add" class="btn btn-primary" data-testid="button-add-customer">+ Add Customer</a>
+    </div>
+</div>
+
+<div class="search-box">
+    <form method="get" action="/customers">
+        <input type="text" name="search" class="form-input" placeholder="Search customers..." value="{{ search }}" data-testid="input-search-customers">
+    </form>
+</div>
+
+<div class="card">
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Phone</th>
+                <th>Date of Birth</th>
+                <th>Allergies</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% if customers %}
+                {% for customer in customers %}
+                <tr data-testid="customer-row-{{ customer.id }}">
+                    <td style="font-weight: 500;">{{ customer.first_name }} {{ customer.last_name }}</td>
+                    <td>{{ customer.email or '-' }}</td>
+                    <td class="font-mono">{{ customer.phone or '-' }}</td>
+                    <td>{{ customer.date_of_birth.strftime('%Y-%m-%d') if customer.date_of_birth else '-' }}</td>
+                    <td>
+                        {% if customer.allergies %}
+                        <span class="badge badge-warning">{{ customer.allergies[:30] }}...</span>
+                        {% else %}
+                        -
+                        {% endif %}
+                    </td>
+                    <td>
+                        <a href="/customers/edit/{{ customer.id }}" class="btn btn-sm btn-secondary" data-testid="button-edit-{{ customer.id }}">Edit</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            {% else %}
+                <tr>
+                    <td colspan="6" style="text-align: center; padding: 2rem; color: var(--text-muted);">No customers found</td>
+                </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

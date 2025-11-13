@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+
+{% block title %}{% if customer %}Edit{% else %}Add{% endif %} Customer - PharmaCare{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">{% if customer %}Edit Customer{% else %}Add New Customer{% endif %}</h1>
+</div>
+
+<div class="card">
+    <form method="post" action="{% if customer %}/customers/edit/{{ customer.id }}{% else %}/customers/add{% endif %}">
+        <div class="grid-2">
+            <div class="form-group">
+                <label class="form-label">First Name *</label>
+                <input type="text" name="first_name" class="form-input" value="{{ customer.first_name if customer else '' }}" required data-testid="input-first-name">
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Last Name *</label>
+                <input type="text" name="last_name" class="form-input" value="{{ customer.last_name if customer else '' }}" required data-testid="input-last-name">
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Email</label>
+                <input type="email" name="email" class="form-input" value="{{ customer.email if customer else '' }}" data-testid="input-email">
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Phone</label>
+                <input type="tel" name="phone" class="form-input" value="{{ customer.phone if customer else '' }}" data-testid="input-phone">
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Date of Birth</label>
+                <input type="date" name="date_of_birth" class="form-input" value="{{ customer.date_of_birth.strftime('%Y-%m-%d') if customer and customer.date_of_birth else '' }}" data-testid="input-dob">
+            </div>
+        </div>
+        
+        <div class="form-group">
+            <label class="form-label">Address</label>
+            <textarea name="address" class="form-input" data-testid="input-address">{{ customer.address if customer else '' }}</textarea>
+        </div>
+        
+        <div class="form-group">
+            <label class="form-label">Allergies</label>
+            <textarea name="allergies" class="form-input" data-testid="input-allergies">{{ customer.allergies if customer else '' }}</textarea>
+        </div>
+        
+        <div class="form-group">
+            <label class="form-label">Medical Conditions</label>
+            <textarea name="medical_conditions" class="form-input" data-testid="input-medical-conditions">{{ customer.medical_conditions if customer else '' }}</textarea>
+        </div>
+        
+        <div class="mt-4">
+            <button type="submit" class="btn btn-primary" data-testid="button-submit-customer">{% if customer %}Update Customer{% else %}Add Customer{% endif %}</button>
+            <a href="/customers" class="btn" style="background: var(--bg-main); margin-left: 0.5rem;">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

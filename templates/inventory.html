@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Inventory Management - PharmaSaaS</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f7fa; }
+        .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 15px 20px; }
+        .container { max-width: 1200px; margin: 20px auto; padding: 0 20px; }
+        .card { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        .btn { padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; font-size: 14px; margin-right: 10px; }
+        .btn-primary { background: #667eea; color: white; }
+        .btn-success { background: #48bb78; color: white; }
+        input, select { padding: 10px; border: 2px solid #e1e8ed; border-radius: 5px; width: 100%; margin-bottom: 10px; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #eee; }
+        th { background: #f8f9fa; font-weight: 600; }
+        .scanner { height: 300px; background: #000; border-radius: 5px; margin-bottom: 15px; position: relative; }
+        .scanner video { width: 100%; height: 100%; object-fit: cover; border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>📦 Inventory Management</h1>
+        <a href="/dashboard" style="color: white; text-decoration: none;">← Back to Dashboard</a>
+    </div>
+    
+    <div class="container">
+        <div class="card">
+            <h3>Add Product with Barcode Scanner</h3>
+            <button class="btn btn-primary" onclick="startScanner()">Start Camera Scanner</button>
+            <button class="btn btn-success" onclick="showManualForm()">Add Manually</button>
+            <div id="scanner-area" style="display: none; margin-top: 15px;">
+                <div id="scanner" class="scanner"></div>
+                <button class="btn btn-primary" onclick="stopScanner()">Stop Scanner</button>
+            </div>
+        </div>
+        
+        <div class="card" id="product-form" style="display: none;">
+            <h3>Product Details</h3>
+            <form onsubmit="saveProduct(event)">
+                <input type="text" id="barcode" placeholder="Barcode" required>
+                <input type="text" id="name" placeholder="Product Name" required>
+                <input type="text" id="generic_name" placeholder="Generic Name">
+                <input type="text" id="manufacturer" placeholder="Manufacturer">
+                <select id="category" required>
+                    <option value="tablet">Tablet</option>
+                    <option value="capsule">Capsule</option>
+                    <option value="syrup">Syrup</option>
+                    <option value="injection">Injection</option>
+                    <option value="cream">Cream</option>
+                    <option value="other">Other</option>
+                </select>
+                <input type="number" step="0.01" id="price" placeholder="Price" required>
+                <input type="number" id="quantity" placeholder="Initial Quantity" required>
+                <input type="number" id="reorder_level" placeholder="Reorder Level" value="10">
+                <button type="submit" class="btn btn-success">Save Product</button>
+                <button type="button" class="btn" onclick="hideForm()">Cancel</button>
+            </form>
+        </div>
+        
+        <div class="card">
+            <h3>Current Inventory</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Barcode</th>
+                        <th>Name</th>
+                        <th>Price</th>
+                        <th>Stock</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody id="inventory-table">
+                    <tr><td colspan="5" style="text-align: center; padding: 40px; color: #999;">Loading inventory...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+    
+    <script>
+        let scannerActive = false;
+        
+        function startScanner() {
+            document.getElementById('scanner-area').style.display = 'block';
+            scannerActive = true;
+            
+            if ('BarcodeDetector' in window) {
+                startNativeScanner();
+            } else {
+                startQuaggaScanner();
+            }
+        }
+        
+        async function startNativeScanner() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+                const video = document.createElement('video');
+                video.srcObject = stream;
+                video.autoplay = true;
+                video.style.width = '100%';
+                video.style.height = '100%';
+                
+                document.getElementById('scanner').innerHTML = '';
+                document.getElementById('scanner').appendChild(video);
+                
+                const barcodeDetector = new BarcodeDetector();
+                
+                const detectLoop = async () => {
+                    if (!scannerActive) {
+                        stream.getTracks().forEach(track => track.stop());
+                        return;
+                    }
+                    
+                    try {
+                        const barcodes = await barcodeDetector.detect(video);
+                        if (barcodes.length > 0) {
+                            handleBarcodeScan(barcodes[0].rawValue);
+                            stopScanner();
+                        }
+                    } catch (e) {}
+                    
+                    setTimeout(detectLoop, 200);
+                };
+                
+                detectLoop();
+            } catch (error) {
+                alert('Camera not available');
+                scannerActive = false;
+            }
+        }
+        
+        function startQuaggaScanner() {
+            Quagga.init({
+                inputStream: {
+                    type: "LiveStream",
+                    target: document.getElementById('scanner'),
+                    constraints: { facingMode: "environment" }
+                },
+                decoder: { readers: ["ean_reader", "code_128_reader"] }
+            }, function(err) {
+                if (err) {
+                    alert('Scanner error');
+                    return;
+                }
+                Quagga.start();
+            });
+            
+            Quagga.onDetected(function(result) {
+                handleBarcodeScan(result.codeResult.code);
+                stopScanner();
+            });
+        }
+        
+        function stopScanner() {
+            scannerActive = false;
+            if (typeof Quagga !== 'undefined') Quagga.stop();
+            document.getElementById('scanner').innerHTML = '';
+            document.getElementById('scanner-area').style.display = 'none';
+        }
+        
+        function handleBarcodeScan(barcode) {
+            document.getElementById('barcode').value = barcode;
+            showManualForm();
+        }
+        
+        function showManualForm() {
+            document.getElementById('product-form').style.display = 'block';
+        }
+        
+        function hideForm() {
+            document.getElementById('product-form').style.display = 'none';
+        }
+        
+        function saveProduct(e) {
+            e.preventDefault();
+            alert('Product saved! (In full version, this would save to database)');
+            hideForm();
+        }
+    </script>
+</body>
+</html>

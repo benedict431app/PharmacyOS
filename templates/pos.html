@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Point of Sale - PharmaSaaS</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f7fa; }
+        .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 15px 20px; }
+        .header h1 { font-size: 1.5em; }
+        .container { max-width: 1200px; margin: 20px auto; padding: 0 20px; display: grid; grid-template-columns: 2fr 1fr; gap: 20px; }
+        .card { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .scanner-area { margin-bottom: 20px; }
+        #scanner-container { width: 100%; height: 300px; position: relative; background: #000; border-radius: 5px; }
+        #scanner-container video { width: 100%; height: 100%; object-fit: cover; border-radius: 5px; }
+        .controls { display: flex; gap: 10px; margin-bottom: 15px; }
+        button { padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; font-size: 14px; }
+        .btn-primary { background: #667eea; color: white; }
+        .btn-success { background: #48bb78; color: white; }
+        .btn-danger { background: #f56565; color: white; }
+        input { padding: 10px; border: 2px solid #e1e8ed; border-radius: 5px; width: 100%; }
+        .cart-item { padding: 10px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; }
+        .cart-total { padding: 15px; background: #f8f9fa; border-radius: 5px; margin-top: 10px; }
+        .cart-total h3 { font-size: 1.5em; color: #667eea; }
+        select { padding: 10px; border: 2px solid #e1e8ed; border-radius: 5px; width: 100%; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🛒 Point of Sale</h1>
+        <a href="/dashboard" style="color: white; text-decoration: none;">← Back to Dashboard</a>
+    </div>
+    
+    <div class="container">
+        <div>
+            <div class="card scanner-area">
+                <h3>📱 Barcode Scanner</h3>
+                <div class="controls">
+                    <button class="btn-primary" onclick="startScanner()">Start Camera</button>
+                    <button class="btn-danger" onclick="stopScanner()">Stop Camera</button>
+                </div>
+                <div id="scanner-container"></div>
+                <p style="margin-top: 10px; color: #666;">Or enter barcode manually:</p>
+                <input type="text" id="manual-barcode" placeholder="Enter barcode..." onkeypress="handleManualBarcode(event)">
+            </div>
+            
+            <div class="card">
+                <h3>Products</h3>
+                <div id="products-list">
+                    <!-- Products will be loaded here -->
+                </div>
+            </div>
+        </div>
+        
+        <div>
+            <div class="card">
+                <h3>Shopping Cart</h3>
+                <div id="cart-items"></div>
+                <div class="cart-total">
+                    <h3>Total: $<span id="cart-total">0.00</span></h3>
+                </div>
+                
+                <div style="margin-top: 20px;">
+                    <label>Customer (Optional)</label>
+                    <select id="customer-select">
+                        <option value="">Walk-in Customer</option>
+                    </select>
+                    
+                    <label style="margin-top: 10px; display: block;">Payment Method</label>
+                    <select id="payment-method">
+                        <option value="cash">Cash</option>
+                        <option value="card">Card</option>
+                        <option value="mobile_payment">Mobile Payment</option>
+                        <option value="credit">Credit (requires customer)</option>
+                    </select>
+                    
+                    <button class="btn-success" style="width: 100%; margin-top: 15px; padding: 15px;" onclick="completeSale()">Complete Sale</button>
+                    <button class="btn-danger" style="width: 100%; margin-top: 10px;" onclick="clearCart()">Clear Cart</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        let cart = [];
+        let scannerActive = false;
+        
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            loadCustomers();
+            updateCartDisplay();
+        });
+        
+        // Load customers
+        async function loadCustomers() {
+            // In real app, fetch from API
+            // For now, showing placeholder
+        }
+        
+        // Start barcode scanner
+        function startScanner() {
+            if (scannerActive) return;
+            
+            scannerActive = true;
+            
+            // Try BarcodeDetector API first (modern browsers)
+            if ('BarcodeDetector' in window) {
+                startNativeScanner();
+            } else {
+                startQuaggaScanner();
+            }
+        }
+        
+        // Native BarcodeDetector API
+        async function startNativeScanner() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+                const video = document.createElement('video');
+                video.srcObject = stream;
+                video.autoplay = true;
+                video.style.width = '100%';
+                video.style.height = '100%';
+                
+                document.getElementById('scanner-container').innerHTML = '';
+                document.getElementById('scanner-container').appendChild(video);
+                
+                const barcodeDetector = new BarcodeDetector({ formats: ['ean_13', 'ean_8', 'code_128', 'code_39'] });
+                
+                const detectLoop = async () => {
+                    if (!scannerActive) {
+                        stream.getTracks().forEach(track => track.stop());
+                        return;
+                    }
+                    
+                    try {
+                        const barcodes = await barcodeDetector.detect(video);
+                        if (barcodes.length > 0) {
+                            handleBarcodeScan(barcodes[0].rawValue);
+                        }
+                    } catch (e) {
+                        console.error('Barcode detection error:', e);
+                    }
+                    
+                    setTimeout(detectLoop, 100);
+                };
+                
+                detectLoop();
+            } catch (error) {
+                alert('Camera access denied or not available. Use manual barcode entry.');
+                scannerActive = false;
+            }
+        }
+        
+        // QuaggaJS fallback scanner
+        function startQuaggaScanner() {
+            Quagga.init({
+                inputStream: {
+                    name: "Live",
+                    type: "LiveStream",
+                    target: document.getElementById('scanner-container'),
+                    constraints: {
+                        facingMode: "environment"
+                    }
+                },
+                decoder: {
+                    readers: ["ean_reader", "code_128_reader", "code_39_reader"]
+                }
+            }, function(err) {
+                if (err) {
+                    console.error(err);
+                    alert('Camera not available. Please use manual barcode entry.');
+                    scannerActive = false;
+                    return;
+                }
+                Quagga.start();
+            });
+            
+            Quagga.onDetected(function(result) {
+                handleBarcodeScan(result.codeResult.code);
+            });
+        }
+        
+        // Stop scanner
+        function stopScanner() {
+            scannerActive = false;
+            if (typeof Quagga !== 'undefined') {
+                Quagga.stop();
+            }
+            document.getElementById('scanner-container').innerHTML = '';
+        }
+        
+        // Handle manual barcode entry
+        function handleManualBarcode(e) {
+            if (e.key === 'Enter') {
+                const barcode = document.getElementById('manual-barcode').value.trim();
+                if (barcode) {
+                    handleBarcodeScan(barcode);
+                    document.getElementById('manual-barcode').value = '';
+                }
+            }
+        }
+        
+        // Handle barcode scan
+        async function handleBarcodeScan(barcode) {
+            try {
+                const response = await fetch(`/api/product_by_barcode?code=${barcode}`);
+                if (response.ok) {
+                    const product = await response.json();
+                    addToCart(product);
+                } else {
+                    alert('Product not found for barcode: ' + barcode);
+                }
+            } catch (error) {
+                alert('Error looking up product: ' + error.message);
+            }
+        }
+        
+        // Add to cart
+        function addToCart(product) {
+            const existing = cart.find(item => item.id === product.id);
+            if (existing) {
+                existing.quantity++;
+            } else {
+                cart.push({
+                    id: product.id,
+                    name: product.name,
+                    price: product.price,
+                    quantity: 1,
+                    stock: product.stock
+                });
+            }
+            updateCartDisplay();
+        }
+        
+        // Update cart display
+        function updateCartDisplay() {
+            const cartEl = document.getElementById('cart-items');
+            const totalEl = document.getElementById('cart-total');
+            
+            if (cart.length === 0) {
+                cartEl.innerHTML = '<p style="color: #999; text-align: center; padding: 20px;">Cart is empty</p>';
+                totalEl.textContent = '0.00';
+                return;
+            }
+            
+            let html = '';
+            let total = 0;
+            
+            cart.forEach((item, index) => {
+                const itemTotal = item.price * item.quantity;
+                total += itemTotal;
+                html += `
+                    <div class="cart-item">
+                        <div>
+                            <strong>${item.name}</strong><br>
+                            <small>$${item.price.toFixed(2)} × ${item.quantity}</small>
+                        </div>
+                        <div style="text-align: right;">
+                            <strong>$${itemTotal.toFixed(2)}</strong><br>
+                            <button onclick="removeFromCart(${index})" style="padding: 5px 10px; background: #f56565; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 12px;">Remove</button>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            cartEl.innerHTML = html;
+            totalEl.textContent = total.toFixed(2);
+        }
+        
+        // Remove from cart
+        function removeFromCart(index) {
+            cart.splice(index, 1);
+            updateCartDisplay();
+        }
+        
+        // Clear cart
+        function clearCart() {
+            if (confirm('Clear all items from cart?')) {
+                cart = [];
+                updateCartDisplay();
+            }
+        }
+        
+        // Complete sale
+        async function completeSale() {
+            if (cart.length === 0) {
+                alert('Cart is empty!');
+                return;
+            }
+            
+            const paymentMethod = document.getElementById('payment-method').value;
+            const customerId = document.getElementById('customer-select').value || null;
+            
+            if (paymentMethod === 'credit' && !customerId) {
+                alert('Please select a customer for credit sales');
+                return;
+            }
+            
+            const total = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+            
+            const saleData = {
+                customerId: customerId,
+                subtotal: total,
+                tax: 0,
+                discount: 0,
+                total: total,
+                paymentMethod: paymentMethod,
+                amountPaid: paymentMethod === 'credit' ? 0 : total,
+                balance: paymentMethod === 'credit' ? total : 0,
+                lineItems: cart.map(item => ({
+                    productId: item.id,
+                    quantity: item.quantity,
+                    unitPrice: item.price,
+                    lineTotal: item.price * item.quantity
+                }))
+            };
+            
+            try {
+                const response = await fetch('/api/sales', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(saleData)
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    alert(`Sale completed! Sale #${result.sale_number}`);
+                    cart = [];
+                    updateCartDisplay();
+                } else {
+                    alert('Error completing sale');
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        }
+    </script>
+</body>
+</html>

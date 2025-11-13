@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+
+{% block title %}Prescriptions - PharmaCare{% endblock %}
+
+{% block content %}
+<div class="flex-between mb-4">
+    <div class="page-header">
+        <h1 class="page-title" data-testid="title-prescriptions">Prescription Management</h1>
+        <p class="page-subtitle">Upload and manage prescriptions</p>
+    </div>
+    <div>
+        <a href="/prescriptions/upload" class="btn btn-primary" data-testid="button-upload-prescription">+ Upload Prescription</a>
+    </div>
+</div>
+
+<div class="card">
+    <table class="table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Customer</th>
+                <th>Doctor</th>
+                <th>Date</th>
+                <th>Status</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% if prescriptions %}
+                {% for rx in prescriptions %}
+                <tr data-testid="prescription-row-{{ rx.id }}">
+                    <td class="font-mono" style="font-size: 0.75rem;">{{ rx.id[:8] }}...</td>
+                    <td>{{ rx.customer.first_name }} {{ rx.customer.last_name }} if rx.customer else 'Unknown' }}</td>
+                    <td>{{ rx.doctor_name or '-' }}</td>
+                    <td>{{ rx.prescription_date.strftime('%Y-%m-%d') }}</td>
+                    <td>
+                        <span class="badge badge-{% if rx.status.value == 'dispensed' %}success{% elif rx.status.value == 'cancelled' %}danger{% else %}warning{% endif %}">
+                            {{ rx.status.value | capitalize }}
+                        </span>
+                    </td>
+                    <td>
+                        {% if rx.image_url %}
+                        <a href="{{ rx.image_url }}" target="_blank" class="btn btn-sm btn-secondary">View Image</a>
+                        {% endif %}
+                        {% if rx.ocr_text %}
+                        <button onclick="alert('OCR Text:\\n{{ rx.ocr_text | replace('\n', '\\n') }}')" class="btn btn-sm" style="background: var(--bg-main);">View OCR</button>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            {% else %}
+                <tr>
+                    <td colspan="6" style="text-align: center; padding: 2rem; color: var(--text-muted);">No prescriptions found</td>
+                </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

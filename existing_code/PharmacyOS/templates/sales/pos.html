@@ -1,0 +1,208 @@
+{% extends "base.html" %}
+
+{% block title %}Sales POS - PharmaCare{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title" data-testid="title-pos">Point of Sale</h1>
+    <p class="page-subtitle">Process sales and manage transactions</p>
+</div>
+
+<div style="display: grid; grid-template-columns: 2fr 1fr; gap: 1.5rem;">
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Select Products</h2>
+        </div>
+        
+        <div class="search-box">
+            <input type="text" id="productSearch" class="form-input" placeholder="Search drugs..." data-testid="input-search-pos">
+        </div>
+        
+        <div id="productList" style="max-height: 500px; overflow-y: auto;">
+            {% for drug in drugs %}
+            <div class="product-item" style="padding: 0.75rem; border-bottom: 1px solid var(--border); cursor: pointer; display: flex; justify-content: space-between; align-items: center;" onclick="addToCart('{{ drug.id }}', '{{ drug.name }}', {{ drug.price }})" data-testid="product-{{ drug.id }}">
+                <div>
+                    <div style="font-weight: 500;">{{ drug.name }}</div>
+                    <div style="font-size: 0.875rem; color: var(--text-muted);">{{ drug.form.value | capitalize }}</div>
+                </div>
+                <div class="font-mono" style="font-weight: 600;">${{ "%.2f"|format(drug.price) }}</div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    
+    <div>
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Cart</h2>
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Customer (Optional)</label>
+                <select id="customerId" class="form-input" data-testid="select-customer">
+                    <option value="">Walk-in Customer</option>
+                    {% for customer in customers %}
+                    <option value="{{ customer.id }}">{{ customer.first_name }} {{ customer.last_name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <div id="cartItems" style="margin: 1rem 0;">
+                <p style="color: var(--text-muted); text-align: center; padding: 2rem;" id="emptyCart">Cart is empty</p>
+            </div>
+            
+            <div style="border-top: 2px solid var(--border); padding-top: 1rem; margin-top: 1rem;">
+                <div class="flex-between mb-4">
+                    <span style="font-weight: 600;">Subtotal:</span>
+                    <span class="font-mono" id="subtotal">$0.00</span>
+                </div>
+                <div class="flex-between mb-4">
+                    <span>Tax (0%):</span>
+                    <span class="font-mono" id="tax">$0.00</span>
+                </div>
+                <div class="flex-between mb-4" style="font-size: 1.25rem; font-weight: 700;">
+                    <span>Total:</span>
+                    <span class="font-mono" id="total" data-testid="text-total">$0.00</span>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Payment Method</label>
+                    <select id="paymentMethod" class="form-input" data-testid="select-payment-method">
+                        <option value="cash">Cash</option>
+                        <option value="card">Card</option>
+                        <option value="insurance">Insurance</option>
+                        <option value="mobile_payment">Mobile Payment</option>
+                    </select>
+                </div>
+                
+                <button class="btn btn-primary" style="width: 100%;" onclick="checkout()" data-testid="button-checkout" id="checkoutBtn">Complete Sale</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let cart = [];
+
+function addToCart(drugId, drugName, price) {
+    const existing = cart.find(item => item.drugId === drugId);
+    if (existing) {
+        existing.quantity++;
+    } else {
+        cart.push({ drugId, drugName, price, quantity: 1 });
+    }
+    updateCart();
+}
+
+function removeFromCart(drugId) {
+    cart = cart.filter(item => item.drugId !== drugId);
+    updateCart();
+}
+
+function updateQuantity(drugId, quantity) {
+    const item = cart.find(item => item.drugId === drugId);
+    if (item) {
+        item.quantity = parseInt(quantity);
+        if (item.quantity <= 0) {
+            removeFromCart(drugId);
+        }
+    }
+    updateCart();
+}
+
+function updateCart() {
+    const cartDiv = document.getElementById('cartItems');
+    const emptyCart = document.getElementById('emptyCart');
+    
+    if (cart.length === 0) {
+        emptyCart.style.display = 'block';
+        cartDiv.innerHTML = '<p style="color: var(--text-muted); text-align: center; padding: 2rem;" id="emptyCart">Cart is empty</p>';
+    } else {
+        emptyCart.style.display = 'none';
+        cartDiv.innerHTML = cart.map(item => `
+            <div style="padding: 0.75rem; border-bottom: 1px solid var(--border);" data-testid="cart-item-${item.drugId}">
+                <div style="font-weight: 500; margin-bottom: 0.5rem;">${item.drugName}</div>
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <input type="number" min="1" value="${item.quantity}" 
+                           style="width: 60px; padding: 0.25rem; border: 1px solid var(--border); border-radius: 0.25rem;"
+                           onchange="updateQuantity('${item.drugId}', this.value)"
+                           data-testid="input-quantity-${item.drugId}">
+                    <span class="font-mono">$${(item.price * item.quantity).toFixed(2)}</span>
+                    <button onclick="removeFromCart('${item.drugId}')" 
+                            style="background: none; border: none; color: var(--danger); cursor: pointer; font-size: 1.25rem;"
+                            data-testid="button-remove-${item.drugId}">×</button>
+                </div>
+            </div>
+        `).join('');
+    }
+    
+    const subtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    const tax = 0;
+    const total = subtotal + tax;
+    
+    document.getElementById('subtotal').textContent = '$' + subtotal.toFixed(2);
+    document.getElementById('tax').textContent = '$' + tax.toFixed(2);
+    document.getElementById('total').textContent = '$' + total.toFixed(2);
+}
+
+async function checkout() {
+    if (cart.length === 0) {
+        alert('Cart is empty');
+        return;
+    }
+    
+    const customerId = document.getElementById('customerId').value || null;
+    const paymentMethod = document.getElementById('paymentMethod').value;
+    
+    const subtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    const tax = 0;
+    const total = subtotal + tax;
+    
+    const lineItems = cart.map(item => ({
+        drug_id: item.drugId,
+        quantity: item.quantity,
+        unit_price: item.price,
+        line_total: item.price * item.quantity
+    }));
+    
+    try {
+        const response = await fetch('/api/sales', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                customer_id: customerId,
+                subtotal: subtotal,
+                tax: tax,
+                total: total,
+                payment_method: paymentMethod,
+                lineItems: lineItems
+            })
+        });
+        
+        const result = await response.json();
+        if (result.success) {
+            alert('Sale completed successfully!');
+            cart = [];
+            updateCart();
+            document.getElementById('customerId').value = '';
+        } else {
+            alert('Error processing sale');
+        }
+    } catch (error) {
+        alert('Error processing sale: ' + error.message);
+    }
+}
+
+// Product search
+document.getElementById('productSearch').addEventListener('input', function(e) {
+    const search = e.target.value.toLowerCase();
+    const products = document.querySelectorAll('.product-item');
+    products.forEach(product => {
+        const text = product.textContent.toLowerCase();
+        product.style.display = text.includes(search) ? 'flex' : 'none';
+    });
+});
+</script>
+{% endblock %}

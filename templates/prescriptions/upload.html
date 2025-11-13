@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block title %}Upload Prescription - PharmaCare{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">Upload Prescription</h1>
+    <p class="page-subtitle">Upload prescription image for OCR extraction</p>
+</div>
+
+<div class="card">
+    <form method="post" action="/prescriptions/upload" enctype="multipart/form-data">
+        <div class="grid-2">
+            <div class="form-group">
+                <label class="form-label">Customer</label>
+                <select name="customer_id" class="form-input" data-testid="select-customer">
+                    <option value="">Select customer</option>
+                    {% for customer in customers %}
+                    <option value="{{ customer.id }}">{{ customer.first_name }} {{ customer.last_name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Prescription Date *</label>
+                <input type="date" name="prescription_date" class="form-input" required data-testid="input-prescription-date">
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Doctor Name</label>
+                <input type="text" name="doctor_name" class="form-input" data-testid="input-doctor-name">
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Doctor License</label>
+                <input type="text" name="doctor_license" class="form-input" data-testid="input-doctor-license">
+            </div>
+        </div>
+        
+        <div class="form-group">
+            <label class="form-label">Prescription Image</label>
+            <input type="file" name="image" accept="image/*" class="form-input" data-testid="input-prescription-image">
+            <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.5rem;">Upload a clear image of the prescription for automatic text extraction</p>
+        </div>
+        
+        <div class="form-group">
+            <label class="form-label">Notes</label>
+            <textarea name="notes" class="form-input" data-testid="input-notes"></textarea>
+        </div>
+        
+        <div class="mt-4">
+            <button type="submit" class="btn btn-primary" data-testid="button-submit-prescription">Upload Prescription</button>
+            <a href="/prescriptions" class="btn" style="background: var(--bg-main); margin-left: 0.5rem;">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}
