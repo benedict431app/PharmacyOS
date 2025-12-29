@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Text, Integer, Numeric, DateTime, Date, Boolean, ForeignKey, Enum, JSON
+from sqlalchemy import Column, String, Text, Integer, Float, DateTime, Date, Boolean, ForeignKey, Enum
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database import Base
@@ -81,7 +81,7 @@ class User(Base):
     password_hash = Column(String(255), nullable=False)
     full_name = Column(String(255), nullable=False)
     role = Column(Enum(UserRoleEnum), nullable=False)
-    is_active = Column(Boolean, default=False)
+    is_active = Column(Boolean, default=True)  # Changed to True by default for demo
     phone = Column(String(50))
     created_at = Column(DateTime, server_default=func.now())
     
@@ -123,7 +123,7 @@ class Drug(Base):
     generic_name = Column(String(255))
     manufacturer = Column(String(255))
     form = Column(Enum(DrugFormEnum), nullable=False)
-    strength = Column(Numeric(10, 2))
+    strength = Column(Float)  # Changed from Numeric to Float for SQLite
     strength_unit = Column(Enum(StrengthUnitEnum))
     category_id = Column(String, ForeignKey("categories.id"))
     supplier_id = Column(String, ForeignKey("suppliers.id"))
@@ -131,7 +131,7 @@ class Drug(Base):
     usage_instructions = Column(Text)
     side_effects = Column(Text)
     contraindications = Column(Text)
-    price = Column(Numeric(10, 2), nullable=False)
+    price = Column(Float, nullable=False)  # Changed from Numeric to Float
     reorder_level = Column(Integer, default=10)
     barcode = Column(String(100))
     image_url = Column(String(500))
@@ -153,7 +153,7 @@ class InventoryBatch(Base):
     quantity_on_hand = Column(Integer, nullable=False, default=0)
     expiry_date = Column(Date, nullable=False)
     purchase_date = Column(Date)
-    cost_price = Column(Numeric(10, 2))
+    cost_price = Column(Float)  # Changed from Numeric to Float
     status = Column(Enum(BatchStatusEnum), default=BatchStatusEnum.active)
     created_at = Column(DateTime, server_default=func.now())
     
@@ -174,8 +174,8 @@ class Customer(Base):
     allergies = Column(Text)
     medical_conditions = Column(Text)
     allow_credit = Column(Boolean, default=False)
-    credit_limit = Column(Numeric(10, 2), default=0)
-    current_balance = Column(Numeric(10, 2), default=0)
+    credit_limit = Column(Float, default=0)  # Changed from Numeric to Float
+    current_balance = Column(Float, default=0)  # Changed from Numeric to Float
     created_at = Column(DateTime, server_default=func.now())
     
     organization = relationship("Organization", back_populates="customers")
@@ -225,13 +225,13 @@ class SalesOrder(Base):
     prescription_id = Column(String, ForeignKey("prescriptions.id"))
     sale_number = Column(String(100))
     sale_date = Column(DateTime, server_default=func.now())
-    subtotal = Column(Numeric(10, 2), nullable=False)
-    tax = Column(Numeric(10, 2), default=0)
-    discount = Column(Numeric(10, 2), default=0)
-    total = Column(Numeric(10, 2), nullable=False)
+    subtotal = Column(Float, nullable=False)  # Changed from Numeric to Float
+    tax = Column(Float, default=0)  # Changed from Numeric to Float
+    discount = Column(Float, default=0)  # Changed from Numeric to Float
+    total = Column(Float, nullable=False)  # Changed from Numeric to Float
     payment_method = Column(Enum(PaymentMethodEnum), nullable=False)
-    amount_paid = Column(Numeric(10, 2), default=0)
-    balance = Column(Numeric(10, 2), default=0)
+    amount_paid = Column(Float, default=0)  # Changed from Numeric to Float
+    balance = Column(Float, default=0)  # Changed from Numeric to Float
     notes = Column(Text)
     created_at = Column(DateTime, server_default=func.now())
     
@@ -248,8 +248,8 @@ class SalesLineItem(Base):
     drug_id = Column(String, ForeignKey("drugs.id"), nullable=False)
     batch_id = Column(String, ForeignKey("inventory_batches.id"))
     quantity = Column(Integer, nullable=False)
-    unit_price = Column(Numeric(10, 2), nullable=False)
-    line_total = Column(Numeric(10, 2), nullable=False)
+    unit_price = Column(Float, nullable=False)  # Changed from Numeric to Float
+    line_total = Column(Float, nullable=False)  # Changed from Numeric to Float
     
     sales_order = relationship("SalesOrder", back_populates="line_items")
     drug = relationship("Drug", back_populates="sales_line_items")
@@ -261,7 +261,7 @@ class CreditPayment(Base):
     id = Column(String, primary_key=True, default=generate_uuid)
     customer_id = Column(String, ForeignKey("customers.id"), nullable=False)
     sale_id = Column(String, ForeignKey("sales_orders.id"))
-    amount = Column(Numeric(10, 2), nullable=False)
+    amount = Column(Float, nullable=False)  # Changed from Numeric to Float
     payment_method = Column(Enum(PaymentMethodEnum), nullable=False)
     notes = Column(Text)
     payment_date = Column(DateTime, server_default=func.now())
@@ -298,7 +298,7 @@ class PurchaseOrder(Base):
     order_date = Column(Date, nullable=False)
     expected_delivery = Column(Date)
     status = Column(String(50), default="pending")
-    total_amount = Column(Numeric(10, 2))
+    total_amount = Column(Float)  # Changed from Numeric to Float
     notes = Column(Text)
     created_at = Column(DateTime, server_default=func.now())
     
@@ -312,20 +312,7 @@ class PurchaseOrderItem(Base):
     purchase_order_id = Column(String, ForeignKey("purchase_orders.id"), nullable=False)
     drug_id = Column(String, ForeignKey("drugs.id"), nullable=False)
     quantity = Column(Integer, nullable=False)
-    unit_cost = Column(Numeric(10, 2), nullable=False)
-    line_total = Column(Numeric(10, 2), nullable=False)
+    unit_cost = Column(Float, nullable=False)  # Changed from Numeric to Float
+    line_total = Column(Float, nullable=False)  # Changed from Numeric to Float
     
     purchase_order = relationship("PurchaseOrder", back_populates="items")
-
-class DemandForecast(Base):
-    __tablename__ = "demand_forecasts"
-    
-    id = Column(String, primary_key=True, default=generate_uuid)
-    drug_id = Column(String, ForeignKey("drugs.id"), nullable=False)
-    forecast_date = Column(Date, nullable=False)
-    forecasted_units = Column(Integer, nullable=False)
-    confidence_level = Column(Numeric(5, 2))
-    model = Column(String(100), default="simple_average")
-    horizon = Column(Integer, default=30)
-    historical_data = Column(JSON)
-    created_at = Column(DateTime, server_default=func.now())

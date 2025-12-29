@@ -5,18 +5,79 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from passlib.context import CryptContext
 from typing import Optional, List
 import os
 from datetime import datetime, date
 from decimal import Decimal
+import uuid
 
 from database import engine, get_db, Base
 import models
 from openai_service import OpenAIService
 
-#Create tables
+# Password context - MOVE THIS UP
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+def create_demo_data(db: Session):
+    """Create demo data for testing"""
+    # Check if demo organization already exists
+    existing_org = db.query(models.Organization).filter(models.Organization.name == "Demo Pharmacy").first()
+    if existing_org:
+        return
+    
+    # Create demo organization
+    org = models.Organization(
+        id=str(uuid.uuid4()),
+        name="Demo Pharmacy",
+        slug="demo-pharmacy",
+        owner_email="admin@demo.com",
+        phone="555-0123",
+        address="123 Main Street, City, State",
+        subscription_plan="professional"
+    )
+    db.add(org)
+    db.flush()
+    
+    # Create demo admin user
+    admin_user = models.User(
+        id=str(uuid.uuid4()),
+        organization_id=org.id,
+        username="admin",
+        email="admin@demo.com",
+        password_hash=pwd_context.hash("admin123"),
+        full_name="Demo Admin",
+        role=models.UserRoleEnum.admin,
+        is_active=True
+    )
+    
+    # Create demo pharmacist user
+    pharmacist_user = models.User(
+        id=str(uuid.uuid4()),
+        organization_id=org.id,
+        username="pharmacist",
+        email="pharmacist@demo.com",
+        password_hash=pwd_context.hash("pharmacist123"),
+        full_name="Demo Pharmacist",
+        role=models.UserRoleEnum.pharmacist,
+        is_active=True
+    )
+    
+    db.add_all([admin_user, pharmacist_user])
+    db.commit()
+    
+    print("Demo data created successfully!")
+
+# Create tables
 Base.metadata.create_all(bind=engine)
+
+# Create demo data
+db = next(get_db())
+try:
+    create_demo_data(db)
+finally:
+    db.close()
 
 app = FastAPI(title="PharmaSaaS - Pharmacy Management System")
 
@@ -35,9 +96,6 @@ app.add_middleware(
 # Mount static files and templates
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
-
-# Password context
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # Initialize OpenAI service
 openai_service = OpenAIService()
@@ -88,6 +146,7 @@ async def landing_page(request: Request):
         .hero p { font-size: 1.3em; margin-bottom: 30px; opacity: 0.95; }
         .cta-btn { background: white; color: #667eea; padding: 15px 40px; border-radius: 50px; text-decoration: none; font-size: 1.1em; font-weight: bold; display: inline-block; transition: transform 0.3s; }
         .cta-btn:hover { transform: scale(1.05); }
+        .cta-btn.secondary { background: transparent; border: 2px solid white; color: white; margin-left: 15px; }
         .features { padding: 60px 20px; max-width: 1200px; margin: 0 auto; }
         .features h2 { text-align: center; font-size: 2.5em; margin-bottom: 50px; color: #333; }
         .feature-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 30px; }
@@ -110,7 +169,10 @@ async def landing_page(request: Request):
     <div class="hero">
         <h1>🏥 PharmaSaaS</h1>
         <p>Complete Pharmacy Management System for Modern Pharmacies</p>
-        <a href="/login" class="cta-btn">Get Started - Login</a>
+        <div style="display: flex; gap: 15px; justify-content: center;">
+            <a href="/register" class="cta-btn">Get Started - Sign Up</a>
+            <a href="/login" class="cta-btn secondary">Login</a>
+        </div>
     </div>
     
     <div class="features">
@@ -194,6 +256,163 @@ async def landing_page(request: Request):
 </html>
     """)
 
+# ==================== REGISTRATION ====================
+@app.get("/register", response_class=HTMLResponse)
+async def register_page(request: Request):
+    if request.session.get("user_id"):
+        return RedirectResponse(url="/dashboard", status_code=303)
+    
+    return HTMLResponse(content="""
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Register - PharmaSaaS</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+        .register-container { background: white; padding: 40px; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); width: 100%; max-width: 450px; }
+        h1 { color: #667eea; margin-bottom: 10px; text-align: center; }
+        p { text-align: center; color: #666; margin-bottom: 30px; }
+        .form-group { margin-bottom: 20px; }
+        label { display: block; margin-bottom: 5px; color: #333; font-weight: 500; }
+        input, select { width: 100%; padding: 12px; border: 2px solid #e1e8ed; border-radius: 8px; font-size: 16px; }
+        input:focus, select:focus { outline: none; border-color: #667eea; }
+        button { width: 100%; padding: 12px; background: #667eea; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; }
+        button:hover { background: #5568d3; }
+        .login-link { text-align: center; margin-top: 20px; }
+        .login-link a { color: #667eea; text-decoration: none; }
+        .error { color: red; margin-bottom: 15px; padding: 10px; background: #fee; border-radius: 5px; }
+        .form-row { display: flex; gap: 15px; }
+        .form-row .form-group { flex: 1; }
+    </style>
+</head>
+<body>
+    <div class="register-container">
+        <h1>🏥 PharmaSaaS</h1>
+        <p>Create your pharmacy account</p>
+        
+        <form method="POST" action="/register">
+            <div class="form-row">
+                <div class="form-group">
+                    <label>First Name</label>
+                    <input type="text" name="first_name" required placeholder="John">
+                </div>
+                <div class="form-group">
+                    <label>Last Name</label>
+                    <input type="text" name="last_name" required placeholder="Doe">
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label>Pharmacy Name</label>
+                <input type="text" name="pharmacy_name" required placeholder="Your Pharmacy Name">
+            </div>
+            
+            <div class="form-group">
+                <label>Email</label>
+                <input type="email" name="email" required placeholder="your@email.com">
+            </div>
+            
+            <div class="form-group">
+                <label>Phone</label>
+                <input type="tel" name="phone" required placeholder="555-0123">
+            </div>
+            
+            <div class="form-group">
+                <label>Password</label>
+                <input type="password" name="password" required placeholder="••••••••" minlength="6">
+            </div>
+            
+            <div class="form-group">
+                <label>Confirm Password</label>
+                <input type="password" name="confirm_password" required placeholder="••••••••" minlength="6">
+            </div>
+            
+            <button type="submit">Create Account</button>
+        </form>
+        
+        <div class="login-link">
+            <p>Already have an account? <a href="/login">Login here</a></p>
+        </div>
+    </div>
+</body>
+</html>
+    """)
+
+@app.post("/register")
+async def register(
+    request: Request,
+    first_name: str = Form(...),
+    last_name: str = Form(...),
+    pharmacy_name: str = Form(...),
+    email: str = Form(...),
+    phone: str = Form(...),
+    password: str = Form(...),
+    confirm_password: str = Form(...),
+    db: Session = Depends(get_db)
+):
+    # Check if passwords match
+    if password != confirm_password:
+        return HTMLResponse(content="""
+            <script>alert('Passwords do not match'); window.location.href='/register';</script>
+        """)
+    
+    # Check if email already exists
+    existing_user = db.query(models.User).filter(models.User.email == email).first()
+    if existing_user:
+        return HTMLResponse(content="""
+            <script>alert('Email already registered'); window.location.href='/register';</script>
+        """)
+    
+    # Check if organization name already exists
+    existing_org = db.query(models.Organization).filter(models.Organization.name == pharmacy_name).first()
+    if existing_org:
+        return HTMLResponse(content="""
+            <script>alert('Pharmacy name already taken'); window.location.href='/register';</script>
+        """)
+    
+    try:
+        # Create organization
+        org = models.Organization(
+            id=str(uuid.uuid4()),
+            name=pharmacy_name,
+            slug=pharmacy_name.lower().replace(' ', '-'),
+            owner_email=email,
+            phone=phone,
+            address="",  # Can be updated later
+            subscription_plan="free"
+        )
+        db.add(org)
+        db.flush()
+        
+        # Create user (admin role for the first user)
+        user = models.User(
+            id=str(uuid.uuid4()),
+            organization_id=org.id,
+            username=email.split('@')[0],
+            email=email,
+            password_hash=pwd_context.hash(password),
+            full_name=f"{first_name} {last_name}",
+            role=models.UserRoleEnum.admin,
+            is_active=True,
+            phone=phone
+        )
+        db.add(user)
+        db.commit()
+        
+        # Auto-login after registration
+        request.session["user_id"] = user.id
+        request.session["role"] = user.role.value
+        request.session["org_id"] = user.organization_id
+        
+        return RedirectResponse(url="/dashboard", status_code=303)
+        
+    except Exception as e:
+        db.rollback()
+        return HTMLResponse(content=f"""
+            <script>alert('Registration failed: {str(e)}'); window.location.href='/register';</script>
+        """)
+
 # ==================== AUTHENTICATION ====================
 @app.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
@@ -221,6 +440,8 @@ async def login_page(request: Request):
         .demo-creds strong { color: #667eea; }
         .back-link { text-align: center; margin-top: 20px; }
         .back-link a { color: #667eea; text-decoration: none; }
+        .register-link { text-align: center; margin-top: 15px; }
+        .register-link a { color: #667eea; text-decoration: none; font-weight: bold; }
         .error { color: red; margin-bottom: 15px; padding: 10px; background: #fee; border-radius: 5px; }
     </style>
 </head>
@@ -244,7 +465,11 @@ async def login_page(request: Request):
         <div class="demo-creds">
             <strong>Demo Credentials:</strong><br>
             Admin: admin@demo.com / admin123<br>
-            Pharmacist: pharmacist@demo.com / pharmacist123 (needs approval)
+            Pharmacist: pharmacist@demo.com / pharmacist123
+        </div>
+        
+        <div class="register-link">
+            <p>Don't have an account? <a href="/register">Sign up here</a></p>
         </div>
         
         <div class="back-link">
