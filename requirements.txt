@@ -1,0 +1,7 @@
+"streamlit>=1.28.0" 
+"pandas>=2.0.0" 
+"numpy>=1.24.0" 
+"python-dotenv>=1.0.0" 
+"openai>=1.0.0"   # If you use OpenAI
+"sqlalchemy>=2.0.0"   # If you use database
+"psycopg2-binary>=2.9.0"   # For PostgreSQL on Render
