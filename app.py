@@ -210,7 +210,7 @@ async def landing_page(request: Request):
         <div class="pricing-grid">
             <div class="pricing-card">
                 <h3>Starter</h3>
-                <div class="price">$29<span>/month</span></div>
+                <div class="price">Kes 180 <span>/month</span></div>
                 <p>Perfect for small pharmacies</p>
                 <ul style="text-align: left; margin-top: 20px; color: #666;">
                     <li>✓ 1 Admin + 2 Pharmacists</li>
@@ -221,7 +221,7 @@ async def landing_page(request: Request):
             </div>
             <div class="pricing-card featured">
                 <h3>Professional</h3>
-                <div class="price">$79<span>/month</span></div>
+                <div class="price">Kes 279<span>/month</span></div>
                 <p>Most popular choice</p>
                 <ul style="text-align: left; margin-top: 20px; color: #666;">
                     <li>✓ Unlimited users</li>
@@ -233,7 +233,7 @@ async def landing_page(request: Request):
             </div>
             <div class="pricing-card">
                 <h3>Enterprise</h3>
-                <div class="price">$199<span>/month</span></div>
+                <div class="price">Kes 499<span>/month</span></div>
                 <p>For pharmacy chains</p>
                 <ul style="text-align: left; margin-top: 20px; color: #666;">
                     <li>✓ Multiple locations</li>
