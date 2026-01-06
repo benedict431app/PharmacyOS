@@ -23,4 +23,4 @@ cryptography>=41.0.0  # for encryption
 fastapi>=0.104.0
 uvicorn[standard]
 streamlit  # remove if not using Streamlit
-
+python-multipart>=0.0.6
