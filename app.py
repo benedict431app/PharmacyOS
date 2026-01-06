@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Request, Form, UploadFile, File, HTTPException, Depends, status
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, FileResponse  # ADD FileResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 from sqlalchemy.orm import Session
@@ -17,25 +17,8 @@ from database import engine, get_db, Base
 import models
 from openai_service import OpenAIService
 
-# Password context - MOVE THIS UP
+# SIMPLIFIED PASSWORD HANDLING
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-# SIMPLIFIED HELPER FUNCTIONS - FIXED
-def truncate_password(password: str) -> str:
-    """Truncate password to 72 bytes for bcrypt compatibility"""
-    if len(password.encode('utf-8')) > 72:
-        return password.encode('utf-8')[:72].decode('utf-8', 'ignore')
-    return password
-
-def hash_password(password: str) -> str:
-    """Hash password with bcrypt, truncating if needed"""
-    truncated = truncate_password(password)
-    return pwd_context.hash(truncated)
-
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verify password with bcrypt, truncating if needed"""
-    truncated = truncate_password(plain_password)
-    return pwd_context.verify(truncated, hashed_password)
 
 def create_demo_data(db: Session):
     """Create demo data for testing"""
@@ -57,25 +40,24 @@ def create_demo_data(db: Session):
     db.add(org)
     db.flush()
     
-    # Create demo admin user - SIMPLIFIED: Use direct pwd_context.hash for short passwords
+    # SIMPLIFIED: Direct password hashing without truncation for demo (passwords are short)
     admin_user = models.User(
         id=str(uuid.uuid4()),
         organization_id=org.id,
         username="admin",
         email="admin@demo.com",
-        password_hash=pwd_context.hash("admin123"),  # SIMPLIFIED
+        password_hash=pwd_context.hash("admin123"),
         full_name="Demo Admin",
         role=models.UserRoleEnum.admin,
         is_active=True
     )
     
-    # Create demo pharmacist user - SIMPLIFIED: Use direct pwd_context.hash for short passwords
     pharmacist_user = models.User(
         id=str(uuid.uuid4()),
         organization_id=org.id,
         username="pharmacist",
         email="pharmacist@demo.com",
-        password_hash=pwd_context.hash("pharmacist123"),  # SIMPLIFIED
+        password_hash=pwd_context.hash("pharmacist123"),
         full_name="Demo Pharmacist",
         role=models.UserRoleEnum.pharmacist,
         is_active=True
@@ -93,6 +75,8 @@ Base.metadata.create_all(bind=engine)
 db = next(get_db())
 try:
     create_demo_data(db)
+except Exception as e:
+    print(f"Error creating demo data: {e}")
 finally:
     db.close()
 
@@ -141,11 +125,6 @@ def require_role(*roles):
             raise HTTPException(status_code=403, detail="Insufficient permissions")
         return user
     return decorator
-
-# ADD FAVICON ROUTE TO AVOID 404 ERRORS
-@app.get("/favicon.ico", include_in_schema=False)
-async def favicon():
-    return FileResponse("static/favicon.ico")
 
 # ==================== LANDING PAGE ====================
 @app.get("/", response_class=HTMLResponse)
@@ -296,7 +275,7 @@ async def register_page(request: Request):
         h1 { color: #667eea; margin-bottom: 10px; text-align: center; }
         p { text-align: center; color: #666; margin-bottom: 30px; }
         .form-group { margin-bottom: 20px; }
-        label { display: block; margin-bottom: 5px; color: #333; font-weight:500; }
+        label { display: block; margin-bottom: 5px; color: #333; font-weight: 500; }
         input, select { width: 100%; padding: 12px; border: 2px solid #e1e8ed; border-radius: 8px; font-size: 16px; }
         input:focus, select:focus { outline: none; border-color: #667eea; }
         button { width: 100%; padding: 12px; background: #667eea; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; }
@@ -408,12 +387,21 @@ async def register(
         db.flush()
         
         # Create user (admin role for the first user)
+        # SIMPLIFIED: Direct password hashing with truncation only if needed
+        if len(password.encode('utf-8')) > 72:
+            # Truncate long passwords
+            truncated = password.encode('utf-8')[:72].decode('utf-8', 'ignore')
+            hashed_password = pwd_context.hash(truncated)
+        else:
+            # Direct hash for normal passwords
+            hashed_password = pwd_context.hash(password)
+        
         user = models.User(
             id=str(uuid.uuid4()),
             organization_id=org.id,
             username=email.split('@')[0],
             email=email,
-            password_hash=hash_password(password),  # Using hash_password helper
+            password_hash=hashed_password,
             full_name=f"{first_name} {last_name}",
             role=models.UserRoleEnum.admin,
             is_active=True,
@@ -504,77 +492,54 @@ async def login_page(request: Request):
 
 @app.post("/login")
 async def login(request: Request, email: str = Form(...), password: str = Form(...), db: Session = Depends(get_db)):
-    user = db.query(models.User).filter(models.User.email == email).first()
-    
-    if not user:
-        return HTMLResponse(content="""
-            <script>alert('Invalid email or password'); window.location.href='/login';</script>
-        """)
-    
-    # FIXED: Use verify_password helper with error handling
     try:
-        if not verify_password(password, user.password_hash):
+        user = db.query(models.User).filter(models.User.email == email).first()
+        
+        if not user:
             return HTMLResponse(content="""
                 <script>alert('Invalid email or password'); window.location.href='/login';</script>
             """)
+        
+        # SIMPLIFIED PASSWORD VERIFICATION
+        # Try direct verification first (for demo users and normal passwords)
+        try:
+            if pwd_context.verify(password, user.password_hash):
+                # Login successful
+                pass
+            else:
+                # Try with truncation (for long passwords from registration)
+                if len(password.encode('utf-8')) > 72:
+                    truncated = password.encode('utf-8')[:72].decode('utf-8', 'ignore')
+                    if not pwd_context.verify(truncated, user.password_hash):
+                        return HTMLResponse(content="""
+                            <script>alert('Invalid email or password'); window.location.href='/login';</script>
+                        """)
+                else:
+                    return HTMLResponse(content="""
+                        <script>alert('Invalid email or password'); window.location.href='/login';</script>
+                    """)
+        except Exception as e:
+            print(f"Password verification error: {e}")
+            return HTMLResponse(content="""
+                <script>alert('Login error. Please try again.'); window.location.href='/login';</script>
+            """)
+        
+        if not user.is_active:
+            return HTMLResponse(content="""
+                <script>alert('Your account is pending approval by your pharmacy admin'); window.location.href='/login';</script>
+            """)
+        
+        request.session["user_id"] = user.id
+        request.session["role"] = user.role.value
+        request.session["org_id"] = user.organization_id
+        
+        return RedirectResponse(url="/dashboard", status_code=303)
+        
     except Exception as e:
-        print(f"Password verification error: {e}")
+        print(f"Login error: {e}")
         return HTMLResponse(content="""
-            <script>alert('Login error. Please try again.'); window.location.href='/login';</script>
+            <script>alert('An error occurred during login. Please try again.'); window.location.href='/login';</script>
         """)
-    
-    if not user.is_active:
-        return HTMLResponse(content="""
-            <script>alert('Your account is pending approval by your pharmacy admin'); window.location.href='/login';</script>
-        """)
-    
-    request.session["user_id"] = user.id
-    request.session["role"] = user.role.value
-    request.session["org_id"] = user.organization_id
-    
-    return RedirectResponse(url="/dashboard", status_code=303)
-
-# ADD RESET DEMO ENDPOINT
-@app.get("/reset-demo")
-async def reset_demo_users(db: Session = Depends(get_db)):
-    """Reset demo users with correct password hashing"""
-    # Delete existing demo users
-    db.query(models.User).filter(
-        models.User.email.in_(["admin@demo.com", "pharmacist@demo.com"])
-    ).delete(synchronize_session=False)
-    
-    # Get demo organization
-    org = db.query(models.Organization).filter(models.Organization.name == "Demo Pharmacy").first()
-    
-    if org:
-        # Recreate admin with direct hash (short password doesn't need truncation)
-        admin_user = models.User(
-            id=str(uuid.uuid4()),
-            organization_id=org.id,
-            username="admin",
-            email="admin@demo.com",
-            password_hash=pwd_context.hash("admin123"),  # Direct hash
-            full_name="Demo Admin",
-            role=models.UserRoleEnum.admin,
-            is_active=True
-        )
-        
-        # Recreate pharmacist with direct hash
-        pharmacist_user = models.User(
-            id=str(uuid.uuid4()),
-            organization_id=org.id,
-            username="pharmacist",
-            email="pharmacist@demo.com",
-            password_hash=pwd_context.hash("pharmacist123"),  # Direct hash
-            full_name="Demo Pharmacist",
-            role=models.UserRoleEnum.pharmacist,
-            is_active=True
-        )
-        
-        db.add_all([admin_user, pharmacist_user])
-        db.commit()
-    
-    return HTMLResponse(content="<h1>Demo users reset!</h1><p>Try logging in now with:<br>Admin: admin@demo.com / admin123<br>Pharmacist: pharmacist@demo.com / pharmacist123<br><br><a href='/login'>Go to Login</a></p>")
 
 @app.get("/logout")
 async def logout(request: Request):
