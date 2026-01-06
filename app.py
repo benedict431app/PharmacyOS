@@ -20,6 +20,21 @@ from openai_service import OpenAIService
 # Password context - MOVE THIS UP
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
+# ADD THESE HELPER FUNCTIONS
+def truncate_password(password: str) -> str:
+    """Truncate password to 72 bytes for bcrypt compatibility"""
+    return password.encode('utf-8')[:72].decode('utf-8', 'ignore')
+
+def hash_password(password: str) -> str:
+    """Hash password with bcrypt, truncating if needed"""
+    truncated = truncate_password(password)
+    return pwd_context.hash(truncated)
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """Verify password with bcrypt, truncating if needed"""
+    truncated = truncate_password(plain_password)
+    return pwd_context.verify(truncated, hashed_password)
+
 def create_demo_data(db: Session):
     """Create demo data for testing"""
     # Check if demo organization already exists
@@ -40,25 +55,25 @@ def create_demo_data(db: Session):
     db.add(org)
     db.flush()
     
-    # Create demo admin user
+    # Create demo admin user - FIXED: use hash_password function
     admin_user = models.User(
         id=str(uuid.uuid4()),
         organization_id=org.id,
         username="admin",
         email="admin@demo.com",
-        password_hash=pwd_context.hash("admin123"),
+        password_hash=hash_password("admin123"),  # FIXED
         full_name="Demo Admin",
         role=models.UserRoleEnum.admin,
         is_active=True
     )
     
-    # Create demo pharmacist user
+    # Create demo pharmacist user - FIXED: use hash_password function
     pharmacist_user = models.User(
         id=str(uuid.uuid4()),
         organization_id=org.id,
         username="pharmacist",
         email="pharmacist@demo.com",
-        password_hash=pwd_context.hash("pharmacist123"),
+        password_hash=hash_password("pharmacist123"),  # FIXED
         full_name="Demo Pharmacist",
         role=models.UserRoleEnum.pharmacist,
         is_active=True
@@ -385,13 +400,13 @@ async def register(
         db.add(org)
         db.flush()
         
-        # Create user (admin role for the first user)
+        # Create user (admin role for the first user) - FIXED: use hash_password function
         user = models.User(
             id=str(uuid.uuid4()),
             organization_id=org.id,
             username=email.split('@')[0],
             email=email,
-            password_hash=pwd_context.hash(password),
+            password_hash=hash_password(password),  # FIXED
             full_name=f"{first_name} {last_name}",
             role=models.UserRoleEnum.admin,
             is_active=True,
@@ -484,7 +499,8 @@ async def login_page(request: Request):
 async def login(request: Request, email: str = Form(...), password: str = Form(...), db: Session = Depends(get_db)):
     user = db.query(models.User).filter(models.User.email == email).first()
     
-    if not user or not pwd_context.verify(password, user.password_hash):
+    # FIXED: use verify_password function instead of pwd_context.verify directly
+    if not user or not verify_password(password, user.password_hash):
         return HTMLResponse(content="""
             <script>alert('Invalid credentials'); window.location.href='/login';</script>
         """)
