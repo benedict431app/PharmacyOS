@@ -20,6 +20,30 @@ from openai_service import OpenAIService
 # SIMPLIFIED PASSWORD HANDLING
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
+# Password helper functions
+def hash_password(password: str) -> str:
+    """Hash password with bcrypt, truncating to 72 bytes if necessary."""
+    password_bytes = password.encode('utf-8')
+    if len(password_bytes) > 72:
+        # Truncate to 72 bytes
+        truncated_password = password_bytes[:72].decode('utf-8', 'ignore')
+        return pwd_context.hash(truncated_password)
+    return pwd_context.hash(password)
+
+def verify_password(password: str, hashed_password: str) -> bool:
+    """Verify password against hash, trying both truncated and non-truncated versions."""
+    # First try as-is
+    if pwd_context.verify(password, hashed_password):
+        return True
+    
+    # Try with truncation if password is long
+    password_bytes = password.encode('utf-8')
+    if len(password_bytes) > 72:
+        truncated_password = password_bytes[:72].decode('utf-8', 'ignore')
+        return pwd_context.verify(truncated_password, hashed_password)
+    
+    return False
+
 def create_demo_data(db: Session):
     """Create demo data for testing"""
     # Check if demo organization already exists
@@ -40,13 +64,13 @@ def create_demo_data(db: Session):
     db.add(org)
     db.flush()
     
-    # SIMPLIFIED: Direct password hashing without truncation for demo (passwords are short)
+    # Create demo users with proper password hashing
     admin_user = models.User(
         id=str(uuid.uuid4()),
         organization_id=org.id,
         username="admin",
         email="admin@demo.com",
-        password_hash=pwd_context.hash("admin123"),
+        password_hash=hash_password("admin123"),
         full_name="Demo Admin",
         role=models.UserRoleEnum.admin,
         is_active=True
@@ -57,13 +81,87 @@ def create_demo_data(db: Session):
         organization_id=org.id,
         username="pharmacist",
         email="pharmacist@demo.com",
-        password_hash=pwd_context.hash("pharmacist123"),
+        password_hash=hash_password("pharmacist123"),
         full_name="Demo Pharmacist",
         role=models.UserRoleEnum.pharmacist,
         is_active=True
     )
     
     db.add_all([admin_user, pharmacist_user])
+    
+    # Create some demo drugs
+    demo_drugs = [
+        models.Drug(
+            id=str(uuid.uuid4()),
+            organization_id=org.id,
+            name="Paracetamol 500mg",
+            generic_name="Paracetamol",
+            brand="Generic",
+            barcode="123456789012",
+            price=Decimal("50.00"),
+            cost_price=Decimal("30.00"),
+            unit="Tablets",
+            reorder_level=100,
+            tax_rate=Decimal("0.16")
+        ),
+        models.Drug(
+            id=str(uuid.uuid4()),
+            organization_id=org.id,
+            name="Amoxicillin 500mg",
+            generic_name="Amoxicillin",
+            brand="Generic",
+            barcode="123456789013",
+            price=Decimal("150.00"),
+            cost_price=Decimal("90.00"),
+            unit="Capsules",
+            reorder_level=50,
+            tax_rate=Decimal("0.16")
+        ),
+        models.Drug(
+            id=str(uuid.uuid4()),
+            organization_id=org.id,
+            name="Ibuprofen 400mg",
+            generic_name="Ibuprofen",
+            brand="Generic",
+            barcode="123456789014",
+            price=Decimal("80.00"),
+            cost_price=Decimal("50.00"),
+            unit="Tablets",
+            reorder_level=75,
+            tax_rate=Decimal("0.16")
+        )
+    ]
+    
+    db.add_all(demo_drugs)
+    db.flush()
+    
+    # Create inventory batches
+    for drug in demo_drugs:
+        batch = models.InventoryBatch(
+            id=str(uuid.uuid4()),
+            drug_id=drug.id,
+            organization_id=org.id,
+            batch_number=f"BATCH-001-{drug.name[:5].upper()}",
+            quantity_on_hand=200,
+            expiry_date=date(2026, 12, 31),
+            purchase_date=date(2025, 1, 1),
+            purchase_price=drug.cost_price
+        )
+        db.add(batch)
+    
+    # Create demo customer
+    demo_customer = models.Customer(
+        id=str(uuid.uuid4()),
+        organization_id=org.id,
+        first_name="John",
+        last_name="Smith",
+        phone="555-0100",
+        email="john.smith@example.com",
+        credit_limit=Decimal("5000.00"),
+        current_balance=Decimal("0.00")
+    )
+    db.add(demo_customer)
+    
     db.commit()
     
     print("Demo data created successfully!")
@@ -77,6 +175,7 @@ try:
     create_demo_data(db)
 except Exception as e:
     print(f"Error creating demo data: {e}")
+    db.rollback()
 finally:
     db.close()
 
@@ -242,7 +341,6 @@ async def landing_page(request: Request):
                     <li>✓ Dedicated account manager</li>
                     <li>✓ 24/7 phone support</li>
                 </ul>
-            </div>
         </div>
         <div class="login-link">
             <p>Already have an account? <a href="/login">Login here</a></p>
@@ -285,14 +383,46 @@ async def register_page(request: Request):
         .error { color: red; margin-bottom: 15px; padding: 10px; background: #fee; border-radius: 5px; }
         .form-row { display: flex; gap: 15px; }
         .form-row .form-group { flex: 1; }
+        .password-note { font-size: 12px; color: #666; margin-top: 5px; }
     </style>
+    <script>
+        function validatePasswordLength(input) {
+            const note = document.getElementById('password-note');
+            if (input.value.length > 70) {
+                note.style.color = 'red';
+                note.textContent = 'Password must be 70 characters or less';
+                return false;
+            } else {
+                note.style.color = '#666';
+                note.textContent = 'Maximum 70 characters recommended';
+                return true;
+            }
+        }
+        
+        function validateForm() {
+            const password = document.querySelector('input[name="password"]');
+            const confirmPassword = document.querySelector('input[name="confirm_password"]');
+            
+            if (!validatePasswordLength(password)) {
+                alert('Password must be 70 characters or less');
+                return false;
+            }
+            
+            if (password.value !== confirmPassword.value) {
+                alert('Passwords do not match');
+                return false;
+            }
+            
+            return true;
+        }
+    </script>
 </head>
 <body>
     <div class="register-container">
         <h1>🏥 PharmaSaaS</h1>
         <p>Create your pharmacy account</p>
         
-        <form method="POST" action="/register">
+        <form method="POST" action="/register" onsubmit="return validateForm()">
             <div class="form-row">
                 <div class="form-group">
                     <label>First Name</label>
@@ -321,7 +451,9 @@ async def register_page(request: Request):
             
             <div class="form-group">
                 <label>Password</label>
-                <input type="password" name="password" required placeholder="••••••••" minlength="6">
+                <input type="password" name="password" required placeholder="••••••••" 
+                       minlength="6" oninput="validatePasswordLength(this)">
+                <div class="password-note" id="password-note">Maximum 70 characters recommended</div>
             </div>
             
             <div class="form-group">
@@ -358,6 +490,12 @@ async def register(
             <script>alert('Passwords do not match'); window.location.href='/register';</script>
         """)
     
+    # Check password length (client-side should catch this, but verify server-side too)
+    if len(password.encode('utf-8')) > 72:
+        return HTMLResponse(content="""
+            <script>alert('Password is too long (maximum 70 characters recommended)'); window.location.href='/register';</script>
+        """)
+    
     # Check if email already exists
     existing_user = db.query(models.User).filter(models.User.email == email).first()
     if existing_user:
@@ -387,21 +525,12 @@ async def register(
         db.flush()
         
         # Create user (admin role for the first user)
-        # SIMPLIFIED: Direct password hashing with truncation only if needed
-        if len(password.encode('utf-8')) > 72:
-            # Truncate long passwords
-            truncated = password.encode('utf-8')[:72].decode('utf-8', 'ignore')
-            hashed_password = pwd_context.hash(truncated)
-        else:
-            # Direct hash for normal passwords
-            hashed_password = pwd_context.hash(password)
-        
         user = models.User(
             id=str(uuid.uuid4()),
             organization_id=org.id,
             username=email.split('@')[0],
             email=email,
-            password_hash=hashed_password,
+            password_hash=hash_password(password),
             full_name=f"{first_name} {last_name}",
             role=models.UserRoleEnum.admin,
             is_active=True,
@@ -500,28 +629,10 @@ async def login(request: Request, email: str = Form(...), password: str = Form(.
                 <script>alert('Invalid email or password'); window.location.href='/login';</script>
             """)
         
-        # SIMPLIFIED PASSWORD VERIFICATION
-        # Try direct verification first (for demo users and normal passwords)
-        try:
-            if pwd_context.verify(password, user.password_hash):
-                # Login successful
-                pass
-            else:
-                # Try with truncation (for long passwords from registration)
-                if len(password.encode('utf-8')) > 72:
-                    truncated = password.encode('utf-8')[:72].decode('utf-8', 'ignore')
-                    if not pwd_context.verify(truncated, user.password_hash):
-                        return HTMLResponse(content="""
-                            <script>alert('Invalid email or password'); window.location.href='/login';</script>
-                        """)
-                else:
-                    return HTMLResponse(content="""
-                        <script>alert('Invalid email or password'); window.location.href='/login';</script>
-                    """)
-        except Exception as e:
-            print(f"Password verification error: {e}")
+        # Verify password using helper function
+        if not verify_password(password, user.password_hash):
             return HTMLResponse(content="""
-                <script>alert('Login error. Please try again.'); window.location.href='/login';</script>
+                <script>alert('Invalid email or password'); window.location.href='/login';</script>
             """)
         
         if not user.is_active:
