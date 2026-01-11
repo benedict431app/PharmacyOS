@@ -59,7 +59,8 @@ def create_demo_data(db: Session):
         owner_email="admin@demo.com",
         phone="555-0123",
         address="123 Main Street, City, State",
-        subscription_plan="professional"
+        subscription_plan="professional",
+        is_active=True
     )
     db.add(org)
     db.flush()
@@ -73,7 +74,8 @@ def create_demo_data(db: Session):
         password_hash=hash_password("admin123"),
         full_name="Demo Admin",
         role=models.UserRoleEnum.admin,
-        is_active=True
+        is_active=True,
+        phone="555-0101"
     )
     
     pharmacist_user = models.User(
@@ -84,10 +86,35 @@ def create_demo_data(db: Session):
         password_hash=hash_password("pharmacist123"),
         full_name="Demo Pharmacist",
         role=models.UserRoleEnum.pharmacist,
-        is_active=True
+        is_active=True,
+        phone="555-0102"
     )
     
     db.add_all([admin_user, pharmacist_user])
+    db.flush()
+    
+    # Create demo category
+    category = models.Category(
+        id=str(uuid.uuid4()),
+        organization_id=org.id,
+        name="General Medicines",
+        description="General prescription and OTC medicines"
+    )
+    db.add(category)
+    db.flush()
+    
+    # Create demo supplier
+    supplier = models.Supplier(
+        id=str(uuid.uuid4()),
+        organization_id=org.id,
+        name="MediSupplies Ltd",
+        contact_person="John Supplier",
+        email="supplies@medisupplies.com",
+        phone="555-0200",
+        address="456 Supply Street, City, State"
+    )
+    db.add(supplier)
+    db.flush()
     
     # Create some demo drugs
     demo_drugs = [
@@ -96,39 +123,57 @@ def create_demo_data(db: Session):
             organization_id=org.id,
             name="Paracetamol 500mg",
             generic_name="Paracetamol",
-            brand="Generic",
-            barcode="123456789012",
-            price=Decimal("50.00"),
-            cost_price=Decimal("30.00"),
-            unit="Tablets",
+            manufacturer="Generic Pharma",
+            form=models.DrugFormEnum.tablet,
+            strength=500.0,
+            strength_unit=models.StrengthUnitEnum.mg,
+            category_id=category.id,
+            supplier_id=supplier.id,
+            description="Pain reliever and fever reducer",
+            usage_instructions="Take 1-2 tablets every 4-6 hours as needed",
+            side_effects="May cause nausea or rash in rare cases",
+            contraindications="Liver disease, alcohol dependence",
+            price=50.0,
             reorder_level=100,
-            tax_rate=Decimal("0.16")
+            barcode="123456789012"
         ),
         models.Drug(
             id=str(uuid.uuid4()),
             organization_id=org.id,
-            name="Amoxicillin 500mg",
+            name="Amoxicillin 500mg Capsules",
             generic_name="Amoxicillin",
-            brand="Generic",
-            barcode="123456789013",
-            price=Decimal("150.00"),
-            cost_price=Decimal("90.00"),
-            unit="Capsules",
+            manufacturer="Antibio Labs",
+            form=models.DrugFormEnum.capsule,
+            strength=500.0,
+            strength_unit=models.StrengthUnitEnum.mg,
+            category_id=category.id,
+            supplier_id=supplier.id,
+            description="Broad-spectrum antibiotic",
+            usage_instructions="Take as prescribed, usually 3 times daily",
+            side_effects="Diarrhea, nausea, rash",
+            contraindications="Penicillin allergy",
+            price=150.0,
             reorder_level=50,
-            tax_rate=Decimal("0.16")
+            barcode="123456789013"
         ),
         models.Drug(
             id=str(uuid.uuid4()),
             organization_id=org.id,
             name="Ibuprofen 400mg",
             generic_name="Ibuprofen",
-            brand="Generic",
-            barcode="123456789014",
-            price=Decimal("80.00"),
-            cost_price=Decimal("50.00"),
-            unit="Tablets",
+            manufacturer="PainFree Inc",
+            form=models.DrugFormEnum.tablet,
+            strength=400.0,
+            strength_unit=models.StrengthUnitEnum.mg,
+            category_id=category.id,
+            supplier_id=supplier.id,
+            description="NSAID for pain and inflammation",
+            usage_instructions="Take with food, 1 tablet every 6-8 hours",
+            side_effects="Stomach upset, dizziness",
+            contraindications="Stomach ulcers, kidney problems",
+            price=80.0,
             reorder_level=75,
-            tax_rate=Decimal("0.16")
+            barcode="123456789014"
         )
     ]
     
@@ -140,12 +185,12 @@ def create_demo_data(db: Session):
         batch = models.InventoryBatch(
             id=str(uuid.uuid4()),
             drug_id=drug.id,
-            organization_id=org.id,
-            batch_number=f"BATCH-001-{drug.name[:5].upper()}",
+            lot_number=f"LOT-001-{drug.name[:5].upper()}",
             quantity_on_hand=200,
             expiry_date=date(2026, 12, 31),
             purchase_date=date(2025, 1, 1),
-            purchase_price=drug.cost_price
+            cost_price=drug.price * 0.6,  # 60% of selling price
+            status=models.BatchStatusEnum.active
         )
         db.add(batch)
     
@@ -155,10 +200,15 @@ def create_demo_data(db: Session):
         organization_id=org.id,
         first_name="John",
         last_name="Smith",
-        phone="555-0100",
         email="john.smith@example.com",
-        credit_limit=Decimal("5000.00"),
-        current_balance=Decimal("0.00")
+        phone="555-0100",
+        address="789 Customer Ave, City, State",
+        date_of_birth=date(1985, 5, 15),
+        allergies="Penicillin, Sulfa drugs",
+        medical_conditions="Hypertension",
+        allow_credit=True,
+        credit_limit=5000.0,
+        current_balance=0.0
     )
     db.add(demo_customer)
     
@@ -519,7 +569,8 @@ async def register(
             owner_email=email,
             phone=phone,
             address="",  # Can be updated later
-            subscription_plan="free"
+            subscription_plan="free",
+            is_active=True
         )
         db.add(org)
         db.flush()
@@ -799,18 +850,21 @@ async def create_sale(request: Request, user: models.User = Depends(require_auth
     data = await request.json()
     org_id = request.session.get("org_id")
     
+    # Generate sale number
+    sale_number = f"SALE-{org_id[:8]}-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+    
     # Create sale order
     sale = models.SalesOrder(
         organization_id=org_id,
         customer_id=data.get("customerId"),
+        sale_number=sale_number,
         subtotal=data["subtotal"],
         tax=data.get("tax", 0),
         discount=data.get("discount", 0),
         total=data["total"],
         payment_method=models.PaymentMethodEnum(data["paymentMethod"]),
         amount_paid=data.get("amountPaid", data["total"]),
-        balance=data.get("balance", 0),
-        sale_number=f"SALE-{org_id}-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+        balance=data.get("balance", 0)
     )
     db.add(sale)
     db.flush()
@@ -826,12 +880,42 @@ async def create_sale(request: Request, user: models.User = Depends(require_auth
         )
         db.add(line_item)
         
-        # Update inventory
+        # Update inventory - find the oldest batch first (FIFO)
         batch = db.query(models.InventoryBatch).filter(
-            models.InventoryBatch.drug_id == item["productId"]
-        ).first()
+            models.InventoryBatch.drug_id == item["productId"],
+            models.InventoryBatch.quantity_on_hand > 0
+        ).order_by(models.InventoryBatch.expiry_date).first()
+        
         if batch:
-            batch.quantity_on_hand -= item["quantity"]
+            if batch.quantity_on_hand >= item["quantity"]:
+                batch.quantity_on_hand -= item["quantity"]
+                line_item.batch_id = batch.id
+            else:
+                # Handle partial fulfillment from this batch
+                remaining = item["quantity"]
+                while remaining > 0 and batch:
+                    qty_to_take = min(batch.quantity_on_hand, remaining)
+                    batch.quantity_on_hand -= qty_to_take
+                    remaining -= qty_to_take
+                    
+                    # Create new line item for each batch used
+                    if qty_to_take < item["quantity"]:
+                        partial_line_item = models.SalesLineItem(
+                            sales_order_id=sale.id,
+                            drug_id=item["productId"],
+                            batch_id=batch.id,
+                            quantity=qty_to_take,
+                            unit_price=item["unitPrice"],
+                            line_total=item["unitPrice"] * qty_to_take
+                        )
+                        db.add(partial_line_item)
+                    else:
+                        line_item.batch_id = batch.id
+                    
+                    batch = db.query(models.InventoryBatch).filter(
+                        models.InventoryBatch.drug_id == item["productId"],
+                        models.InventoryBatch.quantity_on_hand > 0
+                    ).order_by(models.InventoryBatch.expiry_date).first()
     
     # Update customer credit balance if credit sale
     if data["paymentMethod"] == "credit" and data.get("customerId"):
@@ -852,7 +936,10 @@ async def ai_chat(request: Request, user: models.User = Depends(require_auth), d
     
     # Create or get session
     if not session_id:
-        chat_session = models.AIChatSession(user_id=user.id, title=message[:50])
+        chat_session = models.AIChatSession(
+            user_id=user.id, 
+            title=message[:50] + "..." if len(message) > 50 else message
+        )
         db.add(chat_session)
         db.flush()
         session_id = chat_session.id
