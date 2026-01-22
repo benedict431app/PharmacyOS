@@ -23,26 +23,19 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 # Password helper functions
 def hash_password(password: str) -> str:
     """Hash password with bcrypt, truncating to 72 bytes if necessary."""
+    # Always truncate to 72 bytes to avoid bcrypt error
     password_bytes = password.encode('utf-8')
     if len(password_bytes) > 72:
-        # Truncate to 72 bytes
-        truncated_password = password_bytes[:72].decode('utf-8', 'ignore')
-        return pwd_context.hash(truncated_password)
+        password = password_bytes[:72].decode('utf-8', 'ignore')
     return pwd_context.hash(password)
 
 def verify_password(password: str, hashed_password: str) -> bool:
-    """Verify password against hash, trying both truncated and non-truncated versions."""
-    # First try as-is
-    if pwd_context.verify(password, hashed_password):
-        return True
-    
-    # Try with truncation if password is long
+    """Verify password against hash."""
+    # Truncate if necessary before verification
     password_bytes = password.encode('utf-8')
     if len(password_bytes) > 72:
-        truncated_password = password_bytes[:72].decode('utf-8', 'ignore')
-        return pwd_context.verify(truncated_password, hashed_password)
-    
-    return False
+        password = password_bytes[:72].decode('utf-8', 'ignore')
+    return pwd_context.verify(password, hashed_password)
 
 def create_demo_data(db: Session):
     """Create demo data for testing"""
@@ -540,10 +533,15 @@ async def register(
             <script>alert('Passwords do not match'); window.location.href='/register';</script>
         """)
     
-    # Check password length (client-side should catch this, but verify server-side too)
-    if len(password.encode('utf-8')) > 72:
+    # Check password length
+    if len(password) < 6:
         return HTMLResponse(content="""
-            <script>alert('Password is too long (maximum 70 characters recommended)'); window.location.href='/register';</script>
+            <script>alert('Password must be at least 6 characters'); window.location.href='/register';</script>
+        """)
+    
+    if len(password) > 70:
+        return HTMLResponse(content="""
+            <script>alert('Password is too long (maximum 70 characters)'); window.location.href='/register';</script>
         """)
     
     # Check if email already exists
@@ -565,7 +563,7 @@ async def register(
         org = models.Organization(
             id=str(uuid.uuid4()),
             name=pharmacy_name,
-            slug=pharmacy_name.lower().replace(' ', '-'),
+            slug=pharmacy_name.lower().replace(' ', '-').replace("'", ""),
             owner_email=email,
             phone=phone,
             address="",  # Can be updated later
@@ -579,13 +577,13 @@ async def register(
         user = models.User(
             id=str(uuid.uuid4()),
             organization_id=org.id,
-            username=email.split('@')[0],
+            username=email.split('@')[0][:100],
             email=email,
-            password_hash=hash_password(password),
-            full_name=f"{first_name} {last_name}",
+            password_hash=hash_password(password),  # This will handle truncation
+            full_name=f"{first_name} {last_name}"[:255],
             role=models.UserRoleEnum.admin,
             is_active=True,
-            phone=phone
+            phone=phone[:50]
         )
         db.add(user)
         db.commit()
@@ -599,8 +597,9 @@ async def register(
         
     except Exception as e:
         db.rollback()
+        print(f"Registration error: {e}")
         return HTMLResponse(content=f"""
-            <script>alert('Registration failed: {str(e)}'); window.location.href='/register';</script>
+            <script>alert('Registration failed. Please try again.'); window.location.href='/register';</script>
         """)
 
 # ==================== AUTHENTICATION ====================
