@@ -3,8 +3,19 @@ from database import engine, Base
 from models import *
 from passlib.context import CryptContext
 from sqlalchemy.orm import Session
+import uuid
+from datetime import date
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+# Password helper function (same as in app.py)
+def hash_password(password: str) -> str:
+    """Hash password with bcrypt, truncating to 72 bytes if necessary."""
+    # Always truncate to 72 bytes to avoid bcrypt error
+    password_bytes = password.encode('utf-8')
+    if len(password_bytes) > 72:
+        password = password_bytes[:72].decode('utf-8', 'ignore')
+    return pwd_context.hash(password)
 
 def init_database():
     """Create all tables"""
@@ -26,6 +37,7 @@ def seed_demo_org():
         
         # Create demo organization
         org = Organization(
+            id=str(uuid.uuid4()),
             name="Demo Pharmacy",
             slug="demo-pharmacy",
             owner_email="admin@demo.com",
@@ -42,22 +54,22 @@ def seed_demo_org():
             organization_id=org.id,
             username="admin",
             email="admin@demo.com",
-            password_hash=pwd_context.hash("admin123"),
+            password_hash=hash_password("admin123"),
             full_name="Admin User",
             role=UserRoleEnum.admin,
             is_active=True
         )
         db.add(admin)
         
-        # Create pharmacist user (inactive until approved)
+        # Create pharmacist user
         pharmacist = User(
             organization_id=org.id,
             username="pharmacist",
             email="pharmacist@demo.com",
-            password_hash=pwd_context.hash("pharmacist123"),
+            password_hash=hash_password("pharmacist123"),
             full_name="Pharmacist User",
             role=UserRoleEnum.pharmacist,
-            is_active=False
+            is_active=True
         )
         db.add(pharmacist)
         db.flush()
@@ -74,6 +86,8 @@ def seed_demo_org():
         # Create sample products with barcodes
         products = [
             {
+                "id": str(uuid.uuid4()),
+                "organization_id": org.id,
                 "name": "Paracetamol 500mg",
                 "generic_name": "Acetaminophen",
                 "manufacturer": "PharmaCorp",
@@ -83,6 +97,8 @@ def seed_demo_org():
                 "category_id": category.id
             },
             {
+                "id": str(uuid.uuid4()),
+                "organization_id": org.id,
                 "name": "Ibuprofen 400mg",
                 "generic_name": "Ibuprofen",
                 "manufacturer": "HealthCare Inc",
@@ -92,6 +108,8 @@ def seed_demo_org():
                 "category_id": category.id
             },
             {
+                "id": str(uuid.uuid4()),
+                "organization_id": org.id,
                 "name": "Amoxicillin 250mg",
                 "generic_name": "Amoxicillin",
                 "manufacturer": "MediLabs",
@@ -103,17 +121,18 @@ def seed_demo_org():
         ]
         
         for prod_data in products:
-            drug = Drug(organization_id=org.id, **prod_data)
+            drug = Drug(**prod_data)
             db.add(drug)
             db.flush()
             
             # Add inventory batch for each drug
             batch = InventoryBatch(
+                id=str(uuid.uuid4()),
                 drug_id=drug.id,
                 lot_number=f"LOT-{drug.barcode}",
                 quantity_on_hand=100,
-                expiry_date="2026-12-31",
-                purchase_date="2024-01-01",
+                expiry_date=date(2026, 12, 31),
+                purchase_date=date(2024, 1, 1),
                 cost_price=float(drug.price) * 0.6,
                 status=BatchStatusEnum.active
             )
@@ -122,6 +141,8 @@ def seed_demo_org():
         # Create sample customers
         customers = [
             {
+                "id": str(uuid.uuid4()),
+                "organization_id": org.id,
                 "first_name": "John",
                 "last_name": "Doe",
                 "phone": "+1234567001",
@@ -132,6 +153,8 @@ def seed_demo_org():
                 "current_balance": 0
             },
             {
+                "id": str(uuid.uuid4()),
+                "organization_id": org.id,
                 "first_name": "Jane",
                 "last_name": "Smith",
                 "phone": "+1234567002",
@@ -144,7 +167,7 @@ def seed_demo_org():
         ]
         
         for cust_data in customers:
-            customer = Customer(organization_id=org.id, **cust_data)
+            customer = Customer(**cust_data)
             db.add(customer)
         
         db.commit()
@@ -156,7 +179,7 @@ def seed_demo_org():
         print("Admin:")
         print("  Email: admin@demo.com")
         print("  Password: admin123")
-        print("\nPharmacist (requires admin approval):")
+        print("\nPharmacist:")
         print("  Email: pharmacist@demo.com")
         print("  Password: pharmacist123")
         print("=" * 50)
