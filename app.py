@@ -22,12 +22,12 @@ import os
 from datetime import datetime, date
 from decimal import Decimal
 import uuid
+import cohere  # Changed from OpenAI to Cohere
 
 from database import engine, get_db, Base
 import models
-from openai_service import OpenAIService
 
-# Use pbkdf2_sha256 instead of bcrypt to avoid the 72-byte limit completely
+# SIMPLIFIED PASSWORD HANDLING - Use pbkdf2_sha256 to avoid bcrypt 72-byte limit
 pwd_context = CryptContext(
     schemes=["pbkdf2_sha256", "bcrypt"],
     deprecated="auto",
@@ -41,15 +41,46 @@ def hash_password(password: str) -> str:
     if len(password) < 6:
         raise ValueError("Password must be at least 6 characters")
     
-    # pbkdf2_sha256 doesn't have the 72-byte limit, but we'll still be reasonable
     if len(password) > 128:
-        raise ValueError("Password is too long (maximum 128 characters)")
+        raise ValueError("Password must be 128 characters or less")
     
     return pwd_context.hash(password)
 
 def verify_password(password: str, hashed_password: str) -> bool:
     """Verify password against hash."""
+    # Use pbkdf2_sha256 for verification (no 72-byte limit)
     return pwd_context.verify(password, hashed_password)
+
+class CohereService:
+    def __init__(self):
+        api_key = os.getenv("COHERE_API_KEY")  # Changed from OPENAI_API_KEY to COHERE_API_KEY
+        self.client = cohere.Client(api_key) if api_key else None
+        self.model = "command"  # Cohere's latest model
+    
+    async def get_drug_information(self, query: str) -> str:
+        """
+        Get drug information from Cohere
+        """
+        if not self.client:
+            return "AI assistant is not configured. Please add your COHERE_API_KEY to use this feature."
+        
+        try:
+            response = self.client.chat(
+                model=self.model,
+                message=query,
+                preamble="""You are an expert pharmacist assistant. Provide accurate, helpful information about:
+- Drug information, usage, and dosages
+- Drug interactions and contraindications
+- Side effects and warnings
+- Medical conditions and treatments
+- Medication safety and storage
+Always be clear, professional, and remind users to consult healthcare professionals for personalized advice.""",
+                max_tokens=1024
+            )
+            
+            return response.text
+        except Exception as e:
+            return f"I'm sorry, I encountered an error: {str(e)}"
 
 def create_demo_data(db: Session):
     """Create demo data for testing"""
@@ -254,8 +285,8 @@ app.add_middleware(
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
-# Initialize OpenAI service
-openai_service = OpenAIService()
+# Initialize Cohere service
+cohere_service = CohereService()
 
 # Helper function to get current user
 def get_current_user(request: Request, db: Session = Depends(get_db)):
@@ -688,7 +719,7 @@ async def login_page(request: Request):
             </div>
             <div class="form-group">
                 <label>Password</label>
-                <input type="password" name="password" required placeholder="••••••••">
+                <input type="password" name="password" required placeholder="••••••••" maxlength="128">
             </div>
             <button type="submit">Login</button>
         </form>
@@ -721,7 +752,12 @@ async def login(request: Request, email: str = Form(...), password: str = Form(.
                 <script>alert('Invalid email or password'); window.location.href='/login';</script>
             """)
         
-        # Verify password using helper function
+        # IMPORTANT: Truncate password to 128 characters before verification
+        # This prevents the bcrypt 72-byte limit error
+        if len(password) > 128:
+            password = password[:128]
+        
+        # Verify password using helper function (uses pbkdf2_sha256)
         if not verify_password(password, user.password_hash):
             return HTMLResponse(content="""
                 <script>alert('Invalid email or password'); window.location.href='/login';</script>
@@ -740,6 +776,11 @@ async def login(request: Request, email: str = Form(...), password: str = Form(.
         
     except Exception as e:
         print(f"Login error: {e}")
+        # Check if it's the password length error
+        if "password cannot be longer than 72 bytes" in str(e):
+            return HTMLResponse(content="""
+                <script>alert('Password error. Please try logging in with a shorter password or contact support.'); window.location.href='/login';</script>
+            """)
         return HTMLResponse(content="""
             <script>alert('An error occurred during login. Please try again.'); window.location.href='/login';</script>
         """)
@@ -993,8 +1034,8 @@ async def ai_chat(request: Request, user: models.User = Depends(require_auth), d
     )
     db.add(user_msg)
     
-    # Get AI response
-    response = await openai_service.get_drug_information(message)
+    # Get AI response from Cohere
+    response = await cohere_service.get_drug_information(message)
     
     # Save AI response
     ai_msg = models.AIChatMessage(
