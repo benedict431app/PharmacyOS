@@ -27,24 +27,28 @@ from database import engine, get_db, Base
 import models
 from openai_service import OpenAIService
 
-# SIMPLIFIED PASSWORD HANDLING
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Use pbkdf2_sha256 instead of bcrypt to avoid the 72-byte limit completely
+pwd_context = CryptContext(
+    schemes=["pbkdf2_sha256", "bcrypt"],
+    deprecated="auto",
+    pbkdf2_sha256__default_rounds=30000
+)
 
 # Password helper functions
 def hash_password(password: str) -> str:
-    """Hash password with bcrypt, truncating to 72 bytes if necessary."""
-    # Always truncate to 72 bytes to avoid bcrypt error
-    password_bytes = password.encode('utf-8')
-    if len(password_bytes) > 72:
-        password = password_bytes[:72].decode('utf-8', 'ignore')
+    """Hash password with pbkdf2_sha256 (no 72-byte limit)."""
+    # Still do basic validation
+    if len(password) < 6:
+        raise ValueError("Password must be at least 6 characters")
+    
+    # pbkdf2_sha256 doesn't have the 72-byte limit, but we'll still be reasonable
+    if len(password) > 128:
+        raise ValueError("Password is too long (maximum 128 characters)")
+    
     return pwd_context.hash(password)
 
 def verify_password(password: str, hashed_password: str) -> bool:
     """Verify password against hash."""
-    # Truncate if necessary before verification
-    password_bytes = password.encode('utf-8')
-    if len(password_bytes) > 72:
-        password = password_bytes[:72].decode('utf-8', 'ignore')
     return pwd_context.verify(password, hashed_password)
 
 def create_demo_data(db: Session):
@@ -440,15 +444,21 @@ async def register_page(request: Request):
         .password-note { font-size: 12px; color: #666; margin-top: 5px; }
     </style>
     <script>
-        function validatePasswordLength(input) {
+        function validatePasswordLength() {
+            const password = document.querySelector('input[name="password"]');
             const note = document.getElementById('password-note');
-            if (input.value.length > 70) {
+            
+            if (password.value.length < 6) {
                 note.style.color = 'red';
-                note.textContent = 'Password must be 70 characters or less';
+                note.textContent = 'Password must be at least 6 characters';
+                return false;
+            } else if (password.value.length > 128) {
+                note.style.color = 'red';
+                note.textContent = 'Password must be 128 characters or less';
                 return false;
             } else {
                 note.style.color = '#666';
-                note.textContent = 'Maximum 70 characters recommended';
+                note.textContent = '6-128 characters recommended';
                 return true;
             }
         }
@@ -457,11 +467,18 @@ async def register_page(request: Request):
             const password = document.querySelector('input[name="password"]');
             const confirmPassword = document.querySelector('input[name="confirm_password"]');
             
-            if (!validatePasswordLength(password)) {
-                alert('Password must be 70 characters or less');
+            // Validate password length
+            if (password.value.length < 6) {
+                alert('Password must be at least 6 characters');
                 return false;
             }
             
+            if (password.value.length > 128) {
+                alert('Password must be 128 characters or less');
+                return false;
+            }
+            
+            // Check if passwords match
             if (password.value !== confirmPassword.value) {
                 alert('Passwords do not match');
                 return false;
@@ -469,6 +486,14 @@ async def register_page(request: Request):
             
             return true;
         }
+        
+        // Add event listeners for real-time validation
+        document.addEventListener('DOMContentLoaded', function() {
+            const passwordInput = document.querySelector('input[name="password"]');
+            if (passwordInput) {
+                passwordInput.addEventListener('input', validatePasswordLength);
+            }
+        });
     </script>
 </head>
 <body>
@@ -506,13 +531,13 @@ async def register_page(request: Request):
             <div class="form-group">
                 <label>Password</label>
                 <input type="password" name="password" required placeholder="••••••••" 
-                       minlength="6" oninput="validatePasswordLength(this)">
-                <div class="password-note" id="password-note">Maximum 70 characters recommended</div>
+                       minlength="6" maxlength="128">
+                <div class="password-note" id="password-note">6-128 characters recommended</div>
             </div>
             
             <div class="form-group">
                 <label>Confirm Password</label>
-                <input type="password" name="confirm_password" required placeholder="••••••••" minlength="6">
+                <input type="password" name="confirm_password" required placeholder="••••••••" minlength="6" maxlength="128">
             </div>
             
             <button type="submit">Create Account</button>
@@ -538,44 +563,43 @@ async def register(
     confirm_password: str = Form(...),
     db: Session = Depends(get_db)
 ):
-    # Check if passwords match
-    if password != confirm_password:
-        return HTMLResponse(content="""
-            <script>alert('Passwords do not match'); window.location.href='/register';</script>
-        """)
-    
-    # Check password length
-    if len(password) < 6:
-        return HTMLResponse(content="""
-            <script>alert('Password must be at least 6 characters'); window.location.href='/register';</script>
-        """)
-    
-    # Check password byte length (bcrypt limit is 72 bytes)
-    if len(password.encode('utf-8')) > 72:
-        return HTMLResponse(content="""
-            <script>alert('Password is too long (maximum 72 characters/bytes). Please choose a shorter password.'); window.location.href='/register';</script>
-        """)
-    
-    # Check if email already exists
-    existing_user = db.query(models.User).filter(models.User.email == email).first()
-    if existing_user:
-        return HTMLResponse(content="""
-            <script>alert('Email already registered'); window.location.href='/register';</script>
-        """)
-    
-    # Check if organization name already exists
-    existing_org = db.query(models.Organization).filter(models.Organization.name == pharmacy_name).first()
-    if existing_org:
-        return HTMLResponse(content="""
-            <script>alert('Pharmacy name already taken'); window.location.href='/register';</script>
-        """)
-    
     try:
+        # Check if passwords match
+        if password != confirm_password:
+            return HTMLResponse(content="""
+                <script>alert('Passwords do not match'); window.location.href='/register';</script>
+            """)
+        
+        # Check password length (client-side should catch this, but verify server-side too)
+        if len(password) < 6:
+            return HTMLResponse(content="""
+                <script>alert('Password must be at least 6 characters'); window.location.href='/register';</script>
+            """)
+        
+        if len(password) > 128:
+            return HTMLResponse(content="""
+                <script>alert('Password must be 128 characters or less'); window.location.href='/register';</script>
+            """)
+        
+        # Check if email already exists
+        existing_user = db.query(models.User).filter(models.User.email == email).first()
+        if existing_user:
+            return HTMLResponse(content="""
+                <script>alert('Email already registered'); window.location.href='/register';</script>
+            """)
+        
+        # Check if organization name already exists
+        existing_org = db.query(models.Organization).filter(models.Organization.name == pharmacy_name).first()
+        if existing_org:
+            return HTMLResponse(content="""
+                <script>alert('Pharmacy name already taken'); window.location.href='/register';</script>
+            """)
+        
         # Create organization
         org = models.Organization(
             id=str(uuid.uuid4()),
             name=pharmacy_name,
-            slug=pharmacy_name.lower().replace(' ', '-').replace("'", ""),
+            slug=pharmacy_name.lower().replace(' ', '-').replace("'", "").replace('"', ''),
             owner_email=email,
             phone=phone,
             address="",  # Can be updated later
@@ -591,7 +615,7 @@ async def register(
             organization_id=org.id,
             username=email.split('@')[0][:100],
             email=email,
-            password_hash=hash_password(password),  # This will handle truncation
+            password_hash=hash_password(password),  # Uses pbkdf2_sha256 (no 72-byte limit)
             full_name=f"{first_name} {last_name}"[:255],
             role=models.UserRoleEnum.admin,
             is_active=True,
@@ -607,10 +631,16 @@ async def register(
         
         return RedirectResponse(url="/dashboard", status_code=303)
         
+    except ValueError as e:
+        db.rollback()
+        error_msg = str(e)
+        return HTMLResponse(content=f"""
+            <script>alert('{error_msg}'); window.location.href='/register';</script>
+        """)
     except Exception as e:
         db.rollback()
         print(f"Registration error: {e}")
-        return HTMLResponse(content=f"""
+        return HTMLResponse(content="""
             <script>alert('Registration failed. Please try again.'); window.location.href='/register';</script>
         """)
 
