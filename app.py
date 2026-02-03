@@ -1,3 +1,13 @@
+# BCrypt workaround - Fix for passlib/bcrypt compatibility issue
+import bcrypt
+import types
+
+try:
+    bcrypt.__about__
+except AttributeError:
+    bcrypt.__about__ = types.SimpleNamespace()
+    bcrypt.__about__.__version__ = "3.2.0"
+
 from fastapi import FastAPI, Request, Form, UploadFile, File, HTTPException, Depends, status
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
@@ -225,7 +235,7 @@ finally:
 app = FastAPI(title="PharmaSaaS - Pharmacy Management System")
 
 # Add session middleware
-app.add_middleware(SessionMiddleware, secret_key=os.getenv("SESSION_SECRET", "your-secret-key-here"))
+app.add_middleware(SessionMiddleware, secret_key=os.getenv("SESSION_SECRET", "your-secret-key-here-change-in-production"))
 
 # Add CORS
 app.add_middleware(
@@ -384,6 +394,7 @@ async def landing_page(request: Request):
                     <li>✓ Dedicated account manager</li>
                     <li>✓ 24/7 phone support</li>
                 </ul>
+            </div>
         </div>
         <div class="login-link">
             <p>Already have an account? <a href="/login">Login here</a></p>
@@ -539,9 +550,10 @@ async def register(
             <script>alert('Password must be at least 6 characters'); window.location.href='/register';</script>
         """)
     
-    if len(password) > 70:
+    # Check password byte length (bcrypt limit is 72 bytes)
+    if len(password.encode('utf-8')) > 72:
         return HTMLResponse(content="""
-            <script>alert('Password is too long (maximum 70 characters)'); window.location.href='/register';</script>
+            <script>alert('Password is too long (maximum 72 characters/bytes). Please choose a shorter password.'); window.location.href='/register';</script>
         """)
     
     # Check if email already exists
