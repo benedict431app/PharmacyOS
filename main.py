@@ -1,6 +1,8 @@
-def main():
-    print("Hello from repl-nix-workspace!")
+# main.py - create this file
+from fastapi import FastAPI
 
+app = FastAPI()
 
-if __name__ == "__main__":
-    main()
+@app.get("/")
+async def root():
+    return {"message": "Hello from PharmaSaaS!"}
