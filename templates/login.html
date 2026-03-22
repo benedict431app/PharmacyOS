@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Login - PharmaSaaS</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
+        .login-container { background: white; padding: 40px; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); width: 100%; max-width: 400px; }
+        h1 { color: #667eea; margin-bottom: 10px; text-align: center; }
+        p { text-align: center; color: #666; margin-bottom: 30px; }
+        .form-group { margin-bottom: 20px; }
+        label { display: block; margin-bottom: 5px; color: #333; font-weight: 500; }
+        input { width: 100%; padding: 12px; border: 2px solid #e1e8ed; border-radius: 8px; font-size: 16px; }
+        input:focus { outline: none; border-color: #667eea; }
+        button { width: 100%; padding: 12px; background: #667eea; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; }
+        button:hover { background: #5568d3; }
+        .demo-creds { background: #f8f9fa; padding: 15px; border-radius: 8px; margin-top: 20px; font-size: 14px; }
+        .demo-creds strong { color: #667eea; }
+        .back-link { text-align: center; margin-top: 20px; }
+        .back-link a { color: #667eea; text-decoration: none; }
+        .register-link { text-align: center; margin-top: 15px; }
+        .register-link a { color: #667eea; text-decoration: none; font-weight: bold; }
+        .error { color: red; margin-bottom: 15px; padding: 10px; background: #fee; border-radius: 5px; text-align: center; }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <h1>🏥 PharmaSaaS</h1>
+        <p>Login to your pharmacy</p>
+        
+        {% if error %}
+        <div class="error">{{ error }}</div>
+        {% endif %}
+        
+        <form method="POST" action="/login">
+            <div class="form-group">
+                <label>Email</label>
+                <input type="email" name="email" required placeholder="your@email.com">
+            </div>
+            <div class="form-group">
+                <label>Password</label>
+                <input type="password" name="password" required placeholder="••••••••" maxlength="128">
+            </div>
+            <button type="submit">Login</button>
+        </form>
+        
+        <div class="demo-creds">
+            <strong>Demo Credentials:</strong><br>
+            Admin: admin@demo.com / admin123<br>
+            Pharmacist: pharmacist@demo.com / pharmacist123
+        </div>
+        
+        <div class="register-link">
+            <p>Don't have an account? <a href="/register">Sign up here</a></p>
+        </div>
+        
+        <div class="back-link">
+            <a href="/">← Back to home</a>
+        </div>
+    </div>
+</body>
+</html>
