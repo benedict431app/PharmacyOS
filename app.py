@@ -1,7 +1,7 @@
-# BCrypt workaround - Fix for passlib/bcrypt compatibility issue
 import bcrypt
 import types
 
+# BCrypt workaround - Fix for passlib/bcrypt compatibility issue
 try:
     bcrypt.__about__
 except AttributeError:
@@ -15,52 +15,75 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, and_, or_
 from passlib.context import CryptContext
 from typing import Optional, List
 import os
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from decimal import Decimal
 import uuid
-import cohere  # Changed from OpenAI to Cohere
+import cohere
+import json
 
 from database import engine, get_db, Base
 import models
 
-# SIMPLIFIED PASSWORD HANDLING - Use pbkdf2_sha256 to avoid bcrypt 72-byte limit
+# ==================== PASSWORD HANDLING ====================
+# Use pbkdf2_sha256 exclusively to avoid bcrypt 72-byte limit
 pwd_context = CryptContext(
-    schemes=["pbkdf2_sha256", "bcrypt"],
+    schemes=["pbkdf2_sha256"],
     deprecated="auto",
-    pbkdf2_sha256__default_rounds=30000
+    pbkdf2_sha256__default_rounds=30000,
+    pbkdf2_sha256__salt_size=16
 )
 
-# Password helper functions
 def hash_password(password: str) -> str:
     """Hash password with pbkdf2_sha256 (no 72-byte limit)."""
-    # Still do basic validation
+    # Clean and validate password
+    password = str(password).strip()
+    
     if len(password) < 6:
         raise ValueError("Password must be at least 6 characters")
     
     if len(password) > 128:
         raise ValueError("Password must be 128 characters or less")
     
-    return pwd_context.hash(password)
+    try:
+        return pwd_context.hash(password)
+    except Exception as e:
+        print(f"Hashing error: {e}")
+        # Fallback to direct pbkdf2_sha256
+        from passlib.hash import pbkdf2_sha256
+        return pbkdf2_sha256.hash(password)
 
 def verify_password(password: str, hashed_password: str) -> bool:
     """Verify password against hash."""
-    # Use pbkdf2_sha256 for verification (no 72-byte limit)
-    return pwd_context.verify(password, hashed_password)
+    # Clean password
+    password = str(password).strip()
+    
+    # Truncate if needed
+    if len(password) > 128:
+        password = password[:128]
+    
+    try:
+        return pwd_context.verify(password, hashed_password)
+    except Exception as e:
+        print(f"Verification error: {e}")
+        # Try with pbkdf2_sha256 directly
+        from passlib.hash import pbkdf2_sha256
+        try:
+            return pbkdf2_sha256.verify(password, hashed_password)
+        except:
+            return False
 
 class CohereService:
     def __init__(self):
-        api_key = os.getenv("COHERE_API_KEY")  # Changed from OPENAI_API_KEY to COHERE_API_KEY
+        api_key = os.getenv("COHERE_API_KEY")
         self.client = cohere.Client(api_key) if api_key else None
-        self.model = "command"  # Cohere's latest model
+        self.model = "command"
     
     async def get_drug_information(self, query: str) -> str:
-        """
-        Get drug information from Cohere
-        """
+        """Get drug information from Cohere"""
         if not self.client:
             return "AI assistant is not configured. Please add your COHERE_API_KEY to use this feature."
         
@@ -77,7 +100,6 @@ class CohereService:
 Always be clear, professional, and remind users to consult healthcare professionals for personalized advice.""",
                 max_tokens=1024
             )
-            
             return response.text
         except Exception as e:
             return f"I'm sorry, I encountered an error: {str(e)}"
@@ -154,7 +176,7 @@ def create_demo_data(db: Session):
     db.add(supplier)
     db.flush()
     
-    # Create some demo drugs
+    # Create demo drugs
     demo_drugs = [
         models.Drug(
             id=str(uuid.uuid4()),
@@ -227,7 +249,7 @@ def create_demo_data(db: Session):
             quantity_on_hand=200,
             expiry_date=date(2026, 12, 31),
             purchase_date=date(2025, 1, 1),
-            cost_price=drug.price * 0.6,  # 60% of selling price
+            cost_price=drug.price * 0.6,
             status=models.BatchStatusEnum.active
         )
         db.add(batch)
@@ -251,7 +273,6 @@ def create_demo_data(db: Session):
     db.add(demo_customer)
     
     db.commit()
-    
     print("Demo data created successfully!")
 
 # Create tables
@@ -288,7 +309,7 @@ templates = Jinja2Templates(directory="templates")
 # Initialize Cohere service
 cohere_service = CohereService()
 
-# Helper function to get current user
+# Helper functions
 def get_current_user(request: Request, db: Session = Depends(get_db)):
     user_id = request.session.get("user_id")
     if not user_id:
@@ -320,129 +341,7 @@ async def landing_page(request: Request):
     if request.session.get("user_id"):
         return RedirectResponse(url="/dashboard", status_code=303)
     
-    return HTMLResponse(content="""
-<!DOCTYPE html>
-<html>
-<head>
-    <title>PharmaSaaS - Pharmacy Management System</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
-        .hero { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 80px 20px; text-align: center; }
-        .hero h1 { font-size: 3em; margin-bottom: 20px; }
-        .hero p { font-size: 1.3em; margin-bottom: 30px; opacity: 0.95; }
-        .cta-btn { background: white; color: #667eea; padding: 15px 40px; border-radius: 50px; text-decoration: none; font-size: 1.1em; font-weight: bold; display: inline-block; transition: transform 0.3s; }
-        .cta-btn:hover { transform: scale(1.05); }
-        .cta-btn.secondary { background: transparent; border: 2px solid white; color: white; margin-left: 15px; }
-        .features { padding: 60px 20px; max-width: 1200px; margin: 0 auto; }
-        .features h2 { text-align: center; font-size: 2.5em; margin-bottom: 50px; color: #333; }
-        .feature-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 30px; }
-        .feature-card { background: #f8f9fa; padding: 30px; border-radius: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        .feature-card h3 { color: #667eea; margin-bottom: 15px; font-size: 1.5em; }
-        .feature-card p { color: #666; line-height: 1.6; }
-        .pricing { background: #f8f9fa; padding: 60px 20px; }
-        .pricing h2 { text-align: center; font-size: 2.5em; margin-bottom: 50px; color: #333; }
-        .pricing-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 30px; max-width: 1000px; margin: 0 auto; }
-        .pricing-card { background: white; padding: 40px; border-radius: 15px; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        .pricing-card.featured { border: 3px solid #667eea; transform: scale(1.05); }
-        .price { font-size: 3em; color: #667eea; margin: 20px 0; }
-        .price span { font-size: 0.4em; color: #999; }
-        .login-link { text-align: center; margin-top: 30px; }
-        .login-link a { color: #667eea; text-decoration: none; font-size: 1.1em; }
-        footer { background: #333; color: white; text-align: center; padding: 40px 20px; }
-    </style>
-</head>
-<body>
-    <div class="hero">
-        <h1>🏥 PharmaSaaS</h1>
-        <p>Complete Pharmacy Management System for Modern Pharmacies</p>
-        <div style="display: flex; gap: 15px; justify-content: center;">
-            <a href="/register" class="cta-btn">Get Started - Sign Up</a>
-            <a href="/login" class="cta-btn secondary">Login</a>
-        </div>
-    </div>
-    
-    <div class="features">
-        <h2>Powerful Features</h2>
-        <div class="feature-grid">
-            <div class="feature-card">
-                <h3>📱 Barcode Scanning</h3>
-                <p>Use your phone camera to scan product barcodes for instant inventory management and quick sales processing.</p>
-            </div>
-            <div class="feature-card">
-                <h3>👥 Multi-User Support</h3>
-                <p>Admin and Pharmacist roles with custom permissions. Admins control everything, pharmacists handle daily operations.</p>
-            </div>
-            <div class="feature-card">
-                <h3>💳 Credit Management</h3>
-                <p>Comprehensive CRM for managing clients with credit accounts, payment tracking, and purchase history.</p>
-            </div>
-            <div class="feature-card">
-                <h3>🤖 AI Assistant</h3>
-                <p>Built-in AI chat to help with drug information, dosage queries, and inventory recommendations.</p>
-            </div>
-            <div class="feature-card">
-                <h3>📊 Analytics Dashboard</h3>
-                <p>Real-time sales analytics, inventory alerts, and comprehensive reporting for data-driven decisions.</p>
-            </div>
-            <div class="feature-card">
-                <h3>🏪 Point of Sale</h3>
-                <p>Fast, intuitive POS system with barcode scanning, multiple payment methods, and receipt generation.</p>
-            </div>
-        </div>
-    </div>
-    
-    <div class="pricing">
-        <h2>Simple Pricing</h2>
-        <div class="pricing-grid">
-            <div class="pricing-card">
-                <h3>Starter</h3>
-                <div class="price">Kes 180 <span>/month</span></div>
-                <p>Perfect for small pharmacies</p>
-                <ul style="text-align: left; margin-top: 20px; color: #666;">
-                    <li>✓ 1 Admin + 2 Pharmacists</li>
-                    <li>✓ Up to 500 products</li>
-                    <li>✓ Basic reporting</li>
-                    <li>✓ Email support</li>
-                </ul>
-            </div>
-            <div class="pricing-card featured">
-                <h3>Professional</h3>
-                <div class="price">Kes 279<span>/month</span></div>
-                <p>Most popular choice</p>
-                <ul style="text-align: left; margin-top: 20px; color: #666;">
-                    <li>✓ Unlimited users</li>
-                    <li>✓ Unlimited products</li>
-                    <li>✓ Advanced analytics</li>
-                    <li>✓ AI assistant</li>
-                    <li>✓ Priority support</li>
-                </ul>
-            </div>
-            <div class="pricing-card">
-                <h3>Enterprise</h3>
-                <div class="price">Kes 499<span>/month</span></div>
-                <p>For pharmacy chains</p>
-                <ul style="text-align: left; margin-top: 20px; color: #666;">
-                    <li>✓ Multiple locations</li>
-                    <li>✓ Custom integrations</li>
-                    <li>✓ Dedicated account manager</li>
-                    <li>✓ 24/7 phone support</li>
-                </ul>
-            </div>
-        </div>
-        <div class="login-link">
-            <p>Already have an account? <a href="/login">Login here</a></p>
-        </div>
-    </div>
-    
-    <footer>
-        <p>&copy; 2025 PharmaSaaS. All rights reserved.</p>
-        <p>Transform your pharmacy with intelligent management.</p>
-    </footer>
-</body>
-</html>
-    """)
+    return templates.TemplateResponse("landing.html", {"request": request})
 
 # ==================== REGISTRATION ====================
 @app.get("/register", response_class=HTMLResponse)
@@ -450,137 +349,7 @@ async def register_page(request: Request):
     if request.session.get("user_id"):
         return RedirectResponse(url="/dashboard", status_code=303)
     
-    return HTMLResponse(content="""
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Register - PharmaSaaS</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; display: flex; align-items: center; justify-content: center; }
-        .register-container { background: white; padding: 40px; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); width: 100%; max-width: 450px; }
-        h1 { color: #667eea; margin-bottom: 10px; text-align: center; }
-        p { text-align: center; color: #666; margin-bottom: 30px; }
-        .form-group { margin-bottom: 20px; }
-        label { display: block; margin-bottom: 5px; color: #333; font-weight: 500; }
-        input, select { width: 100%; padding: 12px; border: 2px solid #e1e8ed; border-radius: 8px; font-size: 16px; }
-        input:focus, select:focus { outline: none; border-color: #667eea; }
-        button { width: 100%; padding: 12px; background: #667eea; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; }
-        button:hover { background: #5568d3; }
-        .login-link { text-align: center; margin-top: 20px; }
-        .login-link a { color: #667eea; text-decoration: none; }
-        .error { color: red; margin-bottom: 15px; padding: 10px; background: #fee; border-radius: 5px; }
-        .form-row { display: flex; gap: 15px; }
-        .form-row .form-group { flex: 1; }
-        .password-note { font-size: 12px; color: #666; margin-top: 5px; }
-    </style>
-    <script>
-        function validatePasswordLength() {
-            const password = document.querySelector('input[name="password"]');
-            const note = document.getElementById('password-note');
-            
-            if (password.value.length < 6) {
-                note.style.color = 'red';
-                note.textContent = 'Password must be at least 6 characters';
-                return false;
-            } else if (password.value.length > 128) {
-                note.style.color = 'red';
-                note.textContent = 'Password must be 128 characters or less';
-                return false;
-            } else {
-                note.style.color = '#666';
-                note.textContent = '6-128 characters recommended';
-                return true;
-            }
-        }
-        
-        function validateForm() {
-            const password = document.querySelector('input[name="password"]');
-            const confirmPassword = document.querySelector('input[name="confirm_password"]');
-            
-            // Validate password length
-            if (password.value.length < 6) {
-                alert('Password must be at least 6 characters');
-                return false;
-            }
-            
-            if (password.value.length > 128) {
-                alert('Password must be 128 characters or less');
-                return false;
-            }
-            
-            // Check if passwords match
-            if (password.value !== confirmPassword.value) {
-                alert('Passwords do not match');
-                return false;
-            }
-            
-            return true;
-        }
-        
-        // Add event listeners for real-time validation
-        document.addEventListener('DOMContentLoaded', function() {
-            const passwordInput = document.querySelector('input[name="password"]');
-            if (passwordInput) {
-                passwordInput.addEventListener('input', validatePasswordLength);
-            }
-        });
-    </script>
-</head>
-<body>
-    <div class="register-container">
-        <h1>🏥 PharmaSaaS</h1>
-        <p>Create your pharmacy account</p>
-        
-        <form method="POST" action="/register" onsubmit="return validateForm()">
-            <div class="form-row">
-                <div class="form-group">
-                    <label>First Name</label>
-                    <input type="text" name="first_name" required placeholder="John">
-                </div>
-                <div class="form-group">
-                    <label>Last Name</label>
-                    <input type="text" name="last_name" required placeholder="Doe">
-                </div>
-            </div>
-            
-            <div class="form-group">
-                <label>Pharmacy Name</label>
-                <input type="text" name="pharmacy_name" required placeholder="Your Pharmacy Name">
-            </div>
-            
-            <div class="form-group">
-                <label>Email</label>
-                <input type="email" name="email" required placeholder="your@email.com">
-            </div>
-            
-            <div class="form-group">
-                <label>Phone</label>
-                <input type="tel" name="phone" required placeholder="555-0123">
-            </div>
-            
-            <div class="form-group">
-                <label>Password</label>
-                <input type="password" name="password" required placeholder="••••••••" 
-                       minlength="6" maxlength="128">
-                <div class="password-note" id="password-note">6-128 characters recommended</div>
-            </div>
-            
-            <div class="form-group">
-                <label>Confirm Password</label>
-                <input type="password" name="confirm_password" required placeholder="••••••••" minlength="6" maxlength="128">
-            </div>
-            
-            <button type="submit">Create Account</button>
-        </form>
-        
-        <div class="login-link">
-            <p>Already have an account? <a href="/login">Login here</a></p>
-        </div>
-    </div>
-</body>
-</html>
-    """)
+    return templates.TemplateResponse("register.html", {"request": request})
 
 @app.post("/register")
 async def register(
@@ -595,36 +364,46 @@ async def register(
     db: Session = Depends(get_db)
 ):
     try:
-        # Check if passwords match
-        if password != confirm_password:
-            return HTMLResponse(content="""
-                <script>alert('Passwords do not match'); window.location.href='/register';</script>
-            """)
+        # Clean inputs
+        password = password.strip()
+        confirm_password = confirm_password.strip()
+        email = email.strip().lower()
         
-        # Check password length (client-side should catch this, but verify server-side too)
+        # Validate passwords match
+        if password != confirm_password:
+            return templates.TemplateResponse("register.html", {
+                "request": request,
+                "error": "Passwords do not match"
+            })
+        
+        # Validate password length
         if len(password) < 6:
-            return HTMLResponse(content="""
-                <script>alert('Password must be at least 6 characters'); window.location.href='/register';</script>
-            """)
+            return templates.TemplateResponse("register.html", {
+                "request": request,
+                "error": "Password must be at least 6 characters"
+            })
         
         if len(password) > 128:
-            return HTMLResponse(content="""
-                <script>alert('Password must be 128 characters or less'); window.location.href='/register';</script>
-            """)
+            return templates.TemplateResponse("register.html", {
+                "request": request,
+                "error": "Password must be 128 characters or less"
+            })
         
-        # Check if email already exists
+        # Check if email exists
         existing_user = db.query(models.User).filter(models.User.email == email).first()
         if existing_user:
-            return HTMLResponse(content="""
-                <script>alert('Email already registered'); window.location.href='/register';</script>
-            """)
+            return templates.TemplateResponse("register.html", {
+                "request": request,
+                "error": "Email already registered"
+            })
         
-        # Check if organization name already exists
+        # Check if pharmacy name exists
         existing_org = db.query(models.Organization).filter(models.Organization.name == pharmacy_name).first()
         if existing_org:
-            return HTMLResponse(content="""
-                <script>alert('Pharmacy name already taken'); window.location.href='/register';</script>
-            """)
+            return templates.TemplateResponse("register.html", {
+                "request": request,
+                "error": "Pharmacy name already taken"
+            })
         
         # Create organization
         org = models.Organization(
@@ -633,20 +412,30 @@ async def register(
             slug=pharmacy_name.lower().replace(' ', '-').replace("'", "").replace('"', ''),
             owner_email=email,
             phone=phone,
-            address="",  # Can be updated later
+            address="",
             subscription_plan="free",
             is_active=True
         )
         db.add(org)
         db.flush()
         
-        # Create user (admin role for the first user)
+        # Hash password
+        try:
+            hashed_password = hash_password(password)
+        except ValueError as e:
+            db.rollback()
+            return templates.TemplateResponse("register.html", {
+                "request": request,
+                "error": str(e)
+            })
+        
+        # Create user
         user = models.User(
             id=str(uuid.uuid4()),
             organization_id=org.id,
             username=email.split('@')[0][:100],
             email=email,
-            password_hash=hash_password(password),  # Uses pbkdf2_sha256 (no 72-byte limit)
+            password_hash=hashed_password,
             full_name=f"{first_name} {last_name}"[:255],
             role=models.UserRoleEnum.admin,
             is_active=True,
@@ -655,25 +444,23 @@ async def register(
         db.add(user)
         db.commit()
         
-        # Auto-login after registration
+        # Set session
         request.session["user_id"] = user.id
         request.session["role"] = user.role.value
         request.session["org_id"] = user.organization_id
         
         return RedirectResponse(url="/dashboard", status_code=303)
         
-    except ValueError as e:
-        db.rollback()
-        error_msg = str(e)
-        return HTMLResponse(content=f"""
-            <script>alert('{error_msg}'); window.location.href='/register';</script>
-        """)
     except Exception as e:
         db.rollback()
         print(f"Registration error: {e}")
-        return HTMLResponse(content="""
-            <script>alert('Registration failed. Please try again.'); window.location.href='/register';</script>
-        """)
+        import traceback
+        traceback.print_exc()
+        
+        return templates.TemplateResponse("register.html", {
+            "request": request,
+            "error": "Registration failed. Please try again."
+        })
 
 # ==================== AUTHENTICATION ====================
 @app.get("/login", response_class=HTMLResponse)
@@ -681,93 +468,52 @@ async def login_page(request: Request):
     if request.session.get("user_id"):
         return RedirectResponse(url="/dashboard", status_code=303)
     
-    return HTMLResponse(content="""
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Login - PharmaSaaS</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; display: flex; align-items: center; justify-content: center; }
-        .login-container { background: white; padding: 40px; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); width: 100%; max-width: 400px; }
-        h1 { color: #667eea; margin-bottom: 10px; text-align: center; }
-        p { text-align: center; color: #666; margin-bottom: 30px; }
-        .form-group { margin-bottom: 20px; }
-        label { display: block; margin-bottom: 5px; color: #333; font-weight: 500; }
-        input { width: 100%; padding: 12px; border: 2px solid #e1e8ed; border-radius: 8px; font-size: 16px; }
-        input:focus { outline: none; border-color: #667eea; }
-        button { width: 100%; padding: 12px; background: #667eea; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; }
-        button:hover { background: #5568d3; }
-        .demo-creds { background: #f8f9fa; padding: 15px; border-radius: 8px; margin-top: 20px; font-size: 14px; }
-        .demo-creds strong { color: #667eea; }
-        .back-link { text-align: center; margin-top: 20px; }
-        .back-link a { color: #667eea; text-decoration: none; }
-        .register-link { text-align: center; margin-top: 15px; }
-        .register-link a { color: #667eea; text-decoration: none; font-weight: bold; }
-        .error { color: red; margin-bottom: 15px; padding: 10px; background: #fee; border-radius: 5px; }
-    </style>
-</head>
-<body>
-    <div class="login-container">
-        <h1>🏥 PharmaSaaS</h1>
-        <p>Login to your pharmacy</p>
-        
-        <form method="POST" action="/login">
-            <div class="form-group">
-                <label>Email</label>
-                <input type="email" name="email" required placeholder="your@email.com">
-            </div>
-            <div class="form-group">
-                <label>Password</label>
-                <input type="password" name="password" required placeholder="••••••••" maxlength="128">
-            </div>
-            <button type="submit">Login</button>
-        </form>
-        
-        <div class="demo-creds">
-            <strong>Demo Credentials:</strong><br>
-            Admin: admin@demo.com / admin123<br>
-            Pharmacist: pharmacist@demo.com / pharmacist123
-        </div>
-        
-        <div class="register-link">
-            <p>Don't have an account? <a href="/register">Sign up here</a></p>
-        </div>
-        
-        <div class="back-link">
-            <a href="/">← Back to home</a>
-        </div>
-    </div>
-</body>
-</html>
-    """)
+    return templates.TemplateResponse("login.html", {"request": request})
 
 @app.post("/login")
-async def login(request: Request, email: str = Form(...), password: str = Form(...), db: Session = Depends(get_db)):
+async def login(
+    request: Request, 
+    email: str = Form(...), 
+    password: str = Form(...), 
+    db: Session = Depends(get_db)
+):
     try:
+        # Clean inputs
+        email = email.strip().lower()
+        password = password.strip()
+        
         user = db.query(models.User).filter(models.User.email == email).first()
         
         if not user:
-            return HTMLResponse(content="""
-                <script>alert('Invalid email or password'); window.location.href='/login';</script>
-            """)
+            return templates.TemplateResponse("login.html", {
+                "request": request,
+                "error": "Invalid email or password"
+            })
         
-        # IMPORTANT: Truncate password to 128 characters before verification
-        # This prevents the bcrypt 72-byte limit error
+        # Truncate password if needed
         if len(password) > 128:
             password = password[:128]
         
-        # Verify password using helper function (uses pbkdf2_sha256)
-        if not verify_password(password, user.password_hash):
-            return HTMLResponse(content="""
-                <script>alert('Invalid email or password'); window.location.href='/login';</script>
-            """)
+        # Verify password
+        try:
+            password_valid = verify_password(password, user.password_hash)
+        except Exception as e:
+            print(f"Password verification error: {e}")
+            password_valid = False
+        
+        if not password_valid:
+            return templates.TemplateResponse("login.html", {
+                "request": request,
+                "error": "Invalid email or password"
+            })
         
         if not user.is_active:
-            return HTMLResponse(content="""
-                <script>alert('Your account is pending approval by your pharmacy admin'); window.location.href='/login';</script>
-            """)
+            return templates.TemplateResponse("login.html", {
+                "request": request,
+                "error": "Your account is pending approval"
+            })
         
+        # Set session
         request.session["user_id"] = user.id
         request.session["role"] = user.role.value
         request.session["org_id"] = user.organization_id
@@ -776,14 +522,13 @@ async def login(request: Request, email: str = Form(...), password: str = Form(.
         
     except Exception as e:
         print(f"Login error: {e}")
-        # Check if it's the password length error
-        if "password cannot be longer than 72 bytes" in str(e):
-            return HTMLResponse(content="""
-                <script>alert('Password error. Please try logging in with a shorter password or contact support.'); window.location.href='/login';</script>
-            """)
-        return HTMLResponse(content="""
-            <script>alert('An error occurred during login. Please try again.'); window.location.href='/login';</script>
-        """)
+        import traceback
+        traceback.print_exc()
+        
+        return templates.TemplateResponse("login.html", {
+            "request": request,
+            "error": "An error occurred during login. Please try again."
+        })
 
 @app.get("/logout")
 async def logout(request: Request):
@@ -806,102 +551,242 @@ async def dashboard(request: Request, user: models.User = Depends(require_auth),
     ).scalar() or 0
     
     # Get low stock products
-    low_stock = db.query(models.Drug).filter(
-        models.Drug.organization_id == org_id
-    ).all()
-    
     low_stock_items = []
-    for drug in low_stock:
+    drugs = db.query(models.Drug).filter(models.Drug.organization_id == org_id).all()
+    
+    for drug in drugs:
         total_stock = db.query(func.sum(models.InventoryBatch.quantity_on_hand)).filter(
-            models.InventoryBatch.drug_id == drug.id
+            models.InventoryBatch.drug_id == drug.id,
+            models.InventoryBatch.status == models.BatchStatusEnum.active
         ).scalar() or 0
+        
         if total_stock < drug.reorder_level:
-            low_stock_items.append({"name": drug.name, "stock": total_stock, "reorder": drug.reorder_level})
+            low_stock_items.append({
+                "name": drug.name,
+                "stock": total_stock,
+                "reorder": drug.reorder_level
+            })
     
-    return HTMLResponse(content=f"""
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Dashboard - PharmaSaaS</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-        body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f7fa; }}
-        .header {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; }}
-        .header-content {{ max-width: 1200px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; }}
-        .nav {{ display: flex; gap: 20px; }}
-        .nav a {{ color: white; text-decoration: none; padding: 8px 16px; border-radius: 5px; }}
-        .nav a:hover {{ background: rgba(255,255,255,0.2); }}
-        .container {{ max-width: 1200px; margin: 30px auto; padding: 0 20px; }}
-        .welcome {{ background: white; padding: 30px; border-radius: 10px; margin-bottom: 30px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }}
-        .stats-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin-bottom: 30px; }}
-        .stat-card {{ background: white; padding: 25px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }}
-        .stat-value {{ font-size: 2.5em; font-weight: bold; color: #667eea; margin: 10px 0; }}
-        .stat-label {{ color: #666; font-size: 0.9em; }}
-        .alerts {{ background: white; padding: 25px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }}
-        .alert-item {{ padding: 10px; background: #fff3cd; border-left: 4px solid #ffc107; margin-bottom: 10px; }}
-        .ai-chat {{ position: fixed; bottom: 20px; right: 20px; }}
-        .ai-btn {{ background: #667eea; color: white; border: none; padding: 15px 25px; border-radius: 50px; cursor: pointer; font-size: 16px; box-shadow: 0 4px 6px rgba(0,0,0,0.2); }}
-        .ai-btn:hover {{ background: #5568d3; }}
-    </style>
-</head>
-<body>
-    <div class="header">
-        <div class="header-content">
-            <h1>🏥 PharmaSaaS</h1>
-            <div class="nav">
-                <a href="/dashboard">Dashboard</a>
-                <a href="/inventory">Inventory</a>
-                <a href="/sales">POS</a>
-                <a href="/customers">Customers</a>
-                {"<a href='/staff'>Staff</a>" if user.role.value == "admin" else ""}
-                <a href="/logout">Logout</a>
-            </div>
-        </div>
-    </div>
+    # Get recent sales
+    recent_sales = db.query(models.SalesOrder).filter(
+        models.SalesOrder.organization_id == org_id
+    ).order_by(models.SalesOrder.created_at.desc()).limit(5).all()
     
-    <div class="container">
-        <div class="welcome">
-            <h2>Welcome, {user.full_name}!</h2>
-            <p>Role: {user.role.value.title()} | Organization: {user.organization.name}</p>
-        </div>
-        
-        <div class="stats-grid">
-            <div class="stat-card">
-                <div class="stat-label">Total Products</div>
-                <div class="stat-value">{total_products}</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-label">Total Customers</div>
-                <div class="stat-value">{total_customers}</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-label">Total Sales</div>
-                <div class="stat-value">{total_sales}</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-label">Pending Credit</div>
-                <div class="stat-value">${float(pending_credit):.2f}</div>
-            </div>
-        </div>
-        
-        <div class="alerts">
-            <h3>⚠️ Low Stock Alerts</h3>
-            {"".join([f'<div class="alert-item">📦 {item["name"]}: {item["stock"]} units (reorder at {item["reorder"]})</div>' for item in low_stock_items])}
-            {("<p>No low stock items</p>" if not low_stock_items else "")}
-        </div>
-    </div>
-    
-    <div class="ai-chat">
-        <button class="ai-btn" onclick="window.location.href='/ai-chat'">💬 AI Assistant</button>
-    </div>
-</body>
-</html>
-    """)
+    return templates.TemplateResponse("dashboard.html", {
+        "request": request,
+        "user": user,
+        "total_products": total_products,
+        "total_customers": total_customers,
+        "total_sales": total_sales,
+        "pending_credit": float(pending_credit),
+        "low_stock_items": low_stock_items,
+        "recent_sales": recent_sales
+    })
 
-# ==================== API ENDPOINTS ====================
+# ==================== INVENTORY MANAGEMENT ====================
+@app.get("/inventory", response_class=HTMLResponse)
+async def inventory_page(request: Request, user: models.User = Depends(require_auth)):
+    return templates.TemplateResponse("inventory.html", {"request": request, "user": user})
+
+@app.get("/api/inventory")
+async def get_inventory(
+    request: Request, 
+    user: models.User = Depends(require_auth), 
+    db: Session = Depends(get_db),
+    page: int = 1,
+    limit: int = 20,
+    search: str = ""
+):
+    org_id = request.session.get("org_id")
+    offset = (page - 1) * limit
+    
+    query = db.query(models.Drug).filter(models.Drug.organization_id == org_id)
+    
+    if search:
+        query = query.filter(
+            or_(
+                models.Drug.name.ilike(f"%{search}%"),
+                models.Drug.generic_name.ilike(f"%{search}%"),
+                models.Drug.barcode.ilike(f"%{search}%")
+            )
+        )
+    
+    total = query.count()
+    drugs = query.offset(offset).limit(limit).all()
+    
+    # Get stock levels
+    result = []
+    for drug in drugs:
+        total_stock = db.query(func.sum(models.InventoryBatch.quantity_on_hand)).filter(
+            models.InventoryBatch.drug_id == drug.id,
+            models.InventoryBatch.status == models.BatchStatusEnum.active
+        ).scalar() or 0
+        
+        result.append({
+            "id": drug.id,
+            "name": drug.name,
+            "generic_name": drug.generic_name,
+            "manufacturer": drug.manufacturer,
+            "form": drug.form.value,
+            "strength": drug.strength,
+            "strength_unit": drug.strength_unit.value,
+            "price": float(drug.price),
+            "stock": int(total_stock),
+            "reorder_level": drug.reorder_level,
+            "barcode": drug.barcode,
+            "description": drug.description,
+            "usage_instructions": drug.usage_instructions,
+            "side_effects": drug.side_effects,
+            "contraindications": drug.contraindications
+        })
+    
+    return {
+        "items": result,
+        "total": total,
+        "page": page,
+        "limit": limit,
+        "pages": (total + limit - 1) // limit
+    }
+
+@app.post("/api/inventory")
+async def add_inventory(
+    request: Request,
+    user: models.User = Depends(require_auth),
+    db: Session = Depends(get_db)
+):
+    data = await request.json()
+    org_id = request.session.get("org_id")
+    
+    try:
+        # Create drug
+        drug = models.Drug(
+            id=str(uuid.uuid4()),
+            organization_id=org_id,
+            name=data["name"],
+            generic_name=data.get("generic_name", ""),
+            manufacturer=data.get("manufacturer", ""),
+            form=models.DrugFormEnum(data["form"]),
+            strength=data.get("strength", 0),
+            strength_unit=models.StrengthUnitEnum(data.get("strength_unit", "mg")),
+            category_id=data.get("category_id"),
+            supplier_id=data.get("supplier_id"),
+            description=data.get("description", ""),
+            usage_instructions=data.get("usage_instructions", ""),
+            side_effects=data.get("side_effects", ""),
+            contraindications=data.get("contraindications", ""),
+            price=data.get("price", 0),
+            reorder_level=data.get("reorder_level", 50),
+            barcode=data.get("barcode", "")
+        )
+        db.add(drug)
+        db.flush()
+        
+        # Add initial batch if quantity provided
+        if data.get("initial_quantity", 0) > 0:
+            batch = models.InventoryBatch(
+                id=str(uuid.uuid4()),
+                drug_id=drug.id,
+                lot_number=data.get("lot_number", f"LOT-{datetime.now().strftime('%Y%m%d')}"),
+                quantity_on_hand=data["initial_quantity"],
+                expiry_date=datetime.strptime(data["expiry_date"], "%Y-%m-%d").date() if data.get("expiry_date") else None,
+                purchase_date=datetime.now().date(),
+                cost_price=data.get("cost_price", drug.price * 0.6),
+                status=models.BatchStatusEnum.active
+            )
+            db.add(batch)
+        
+        db.commit()
+        
+        return {"success": True, "id": drug.id}
+        
+    except Exception as e:
+        db.rollback()
+        print(f"Error adding inventory: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.put("/api/inventory/{drug_id}")
+async def update_inventory(
+    drug_id: str,
+    request: Request,
+    user: models.User = Depends(require_auth),
+    db: Session = Depends(get_db)
+):
+    data = await request.json()
+    org_id = request.session.get("org_id")
+    
+    drug = db.query(models.Drug).filter(
+        models.Drug.id == drug_id,
+        models.Drug.organization_id == org_id
+    ).first()
+    
+    if not drug:
+        raise HTTPException(status_code=404, detail="Product not found")
+    
+    try:
+        # Update fields
+        for key, value in data.items():
+            if hasattr(drug, key) and key not in ["id", "organization_id", "created_at"]:
+                if key == "form":
+                    setattr(drug, key, models.DrugFormEnum(value))
+                elif key == "strength_unit":
+                    setattr(drug, key, models.StrengthUnitEnum(value))
+                else:
+                    setattr(drug, key, value)
+        
+        db.commit()
+        return {"success": True}
+        
+    except Exception as e:
+        db.rollback()
+        print(f"Error updating inventory: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.delete("/api/inventory/{drug_id}")
+async def delete_inventory(
+    drug_id: str,
+    request: Request,
+    user: models.User = Depends(require_role("admin")),
+    db: Session = Depends(get_db)
+):
+    org_id = request.session.get("org_id")
+    
+    drug = db.query(models.Drug).filter(
+        models.Drug.id == drug_id,
+        models.Drug.organization_id == org_id
+    ).first()
+    
+    if not drug:
+        raise HTTPException(status_code=404, detail="Product not found")
+    
+    # Check if product has sales
+    has_sales = db.query(models.SalesLineItem).filter(models.SalesLineItem.drug_id == drug_id).first()
+    if has_sales:
+        raise HTTPException(status_code=400, detail="Cannot delete product with existing sales")
+    
+    try:
+        # Delete batches first
+        db.query(models.InventoryBatch).filter(models.InventoryBatch.drug_id == drug_id).delete()
+        db.delete(drug)
+        db.commit()
+        return {"success": True}
+        
+    except Exception as e:
+        db.rollback()
+        print(f"Error deleting inventory: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+# ==================== POINT OF SALE ====================
+@app.get("/sales", response_class=HTMLResponse)
+async def sales_page(request: Request, user: models.User = Depends(require_auth)):
+    return templates.TemplateResponse("pos.html", {"request": request, "user": user})
+
 @app.get("/api/product_by_barcode")
-async def get_product_by_barcode(code: str, request: Request, user: models.User = Depends(require_auth), db: Session = Depends(get_db)):
+async def get_product_by_barcode(
+    code: str, 
+    request: Request, 
+    user: models.User = Depends(require_auth), 
+    db: Session = Depends(get_db)
+):
     """Get product by barcode for scanner integration"""
     org_id = request.session.get("org_id")
     
@@ -911,11 +796,12 @@ async def get_product_by_barcode(code: str, request: Request, user: models.User 
     ).first()
     
     if not product:
-        return JSONResponse({"error": "Product not found"}, status_code=404)
+        raise HTTPException(status_code=404, detail="Product not found")
     
     # Get total stock
     total_stock = db.query(func.sum(models.InventoryBatch.quantity_on_hand)).filter(
-        models.InventoryBatch.drug_id == product.id
+        models.InventoryBatch.drug_id == product.id,
+        models.InventoryBatch.status == models.BatchStatusEnum.active
     ).scalar() or 0
     
     return {
@@ -926,99 +812,521 @@ async def get_product_by_barcode(code: str, request: Request, user: models.User 
         "stock": int(total_stock)
     }
 
+@app.get("/api/products/search")
+async def search_products(
+    request: Request,
+    q: str,
+    user: models.User = Depends(require_auth),
+    db: Session = Depends(get_db)
+):
+    org_id = request.session.get("org_id")
+    
+    products = db.query(models.Drug).filter(
+        models.Drug.organization_id == org_id,
+        or_(
+            models.Drug.name.ilike(f"%{q}%"),
+            models.Drug.generic_name.ilike(f"%{q}%"),
+            models.Drug.barcode.ilike(f"%{q}%")
+        )
+    ).limit(20).all()
+    
+    result = []
+    for product in products:
+        total_stock = db.query(func.sum(models.InventoryBatch.quantity_on_hand)).filter(
+            models.InventoryBatch.drug_id == product.id,
+            models.InventoryBatch.status == models.BatchStatusEnum.active
+        ).scalar() or 0
+        
+        result.append({
+            "id": product.id,
+            "name": product.name,
+            "price": float(product.price),
+            "stock": int(total_stock),
+            "barcode": product.barcode
+        })
+    
+    return result
+
 @app.post("/api/sales")
-async def create_sale(request: Request, user: models.User = Depends(require_auth), db: Session = Depends(get_db)):
+async def create_sale(
+    request: Request, 
+    user: models.User = Depends(require_auth), 
+    db: Session = Depends(get_db)
+):
     """Create new sale"""
     data = await request.json()
     org_id = request.session.get("org_id")
     
-    # Generate sale number
-    sale_number = f"SALE-{org_id[:8]}-{datetime.now().strftime('%Y%m%d%H%M%S')}"
-    
-    # Create sale order
-    sale = models.SalesOrder(
-        organization_id=org_id,
-        customer_id=data.get("customerId"),
-        sale_number=sale_number,
-        subtotal=data["subtotal"],
-        tax=data.get("tax", 0),
-        discount=data.get("discount", 0),
-        total=data["total"],
-        payment_method=models.PaymentMethodEnum(data["paymentMethod"]),
-        amount_paid=data.get("amountPaid", data["total"]),
-        balance=data.get("balance", 0)
-    )
-    db.add(sale)
-    db.flush()
-    
-    # Add line items and update inventory
-    for item in data["lineItems"]:
-        line_item = models.SalesLineItem(
-            sales_order_id=sale.id,
-            drug_id=item["productId"],
-            quantity=item["quantity"],
-            unit_price=item["unitPrice"],
-            line_total=item["lineTotal"]
+    try:
+        # Generate sale number
+        sale_number = f"SALE-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+        
+        # Create sale order
+        sale = models.SalesOrder(
+            id=str(uuid.uuid4()),
+            organization_id=org_id,
+            customer_id=data.get("customerId"),
+            sale_number=sale_number,
+            subtotal=data["subtotal"],
+            tax=data.get("tax", 0),
+            discount=data.get("discount", 0),
+            total=data["total"],
+            payment_method=models.PaymentMethodEnum(data["paymentMethod"]),
+            amount_paid=data.get("amountPaid", data["total"]),
+            balance=data.get("balance", 0),
+            created_by=user.id
         )
-        db.add(line_item)
+        db.add(sale)
+        db.flush()
         
-        # Update inventory - find the oldest batch first (FIFO)
-        batch = db.query(models.InventoryBatch).filter(
-            models.InventoryBatch.drug_id == item["productId"],
-            models.InventoryBatch.quantity_on_hand > 0
-        ).order_by(models.InventoryBatch.expiry_date).first()
+        # Add line items and update inventory
+        for item in data["lineItems"]:
+            # Get product to verify price
+            product = db.query(models.Drug).filter(models.Drug.id == item["productId"]).first()
+            if not product:
+                raise HTTPException(status_code=404, detail=f"Product {item['productId']} not found")
+            
+            line_item = models.SalesLineItem(
+                id=str(uuid.uuid4()),
+                sales_order_id=sale.id,
+                drug_id=item["productId"],
+                quantity=item["quantity"],
+                unit_price=item["unitPrice"],
+                line_total=item["lineTotal"]
+            )
+            db.add(line_item)
+            
+            # Update inventory - FIFO approach
+            remaining_quantity = item["quantity"]
+            batches = db.query(models.InventoryBatch).filter(
+                models.InventoryBatch.drug_id == item["productId"],
+                models.InventoryBatch.quantity_on_hand > 0,
+                models.InventoryBatch.status == models.BatchStatusEnum.active
+            ).order_by(models.InventoryBatch.expiry_date).all()
+            
+            for batch in batches:
+                if remaining_quantity <= 0:
+                    break
+                    
+                qty_to_take = min(batch.quantity_on_hand, remaining_quantity)
+                batch.quantity_on_hand -= qty_to_take
+                remaining_quantity -= qty_to_take
+                
+                # If batch is now empty, mark as inactive
+                if batch.quantity_on_hand == 0:
+                    batch.status = models.BatchStatusEnum.empty
+            
+            if remaining_quantity > 0:
+                db.rollback()
+                raise HTTPException(status_code=400, detail=f"Insufficient stock for {product.name}")
         
-        if batch:
-            if batch.quantity_on_hand >= item["quantity"]:
-                batch.quantity_on_hand -= item["quantity"]
-                line_item.batch_id = batch.id
-            else:
-                # Handle partial fulfillment from this batch
-                remaining = item["quantity"]
-                while remaining > 0 and batch:
-                    qty_to_take = min(batch.quantity_on_hand, remaining)
-                    batch.quantity_on_hand -= qty_to_take
-                    remaining -= qty_to_take
-                    
-                    # Create new line item for each batch used
-                    if qty_to_take < item["quantity"]:
-                        partial_line_item = models.SalesLineItem(
-                            sales_order_id=sale.id,
-                            drug_id=item["productId"],
-                            batch_id=batch.id,
-                            quantity=qty_to_take,
-                            unit_price=item["unitPrice"],
-                            line_total=item["unitPrice"] * qty_to_take
-                        )
-                        db.add(partial_line_item)
-                    else:
-                        line_item.batch_id = batch.id
-                    
-                    batch = db.query(models.InventoryBatch).filter(
-                        models.InventoryBatch.drug_id == item["productId"],
-                        models.InventoryBatch.quantity_on_hand > 0
-                    ).order_by(models.InventoryBatch.expiry_date).first()
+        # Update customer credit balance if credit sale
+        if data["paymentMethod"] == "credit" and data.get("customerId"):
+            customer = db.query(models.Customer).filter(models.Customer.id == data["customerId"]).first()
+            if customer:
+                customer.current_balance += data.get("balance", 0)
+        
+        db.commit()
+        
+        return {
+            "success": True, 
+            "sale_id": sale.id, 
+            "sale_number": sale.sale_number,
+            "receipt": {
+                "sale_number": sale.sale_number,
+                "date": sale.created_at.isoformat(),
+                "items": data["lineItems"],
+                "subtotal": data["subtotal"],
+                "tax": data.get("tax", 0),
+                "discount": data.get("discount", 0),
+                "total": data["total"],
+                "payment_method": data["paymentMethod"],
+                "amount_paid": data.get("amountPaid", data["total"]),
+                "balance": data.get("balance", 0)
+            }
+        }
+        
+    except Exception as e:
+        db.rollback()
+        print(f"Error creating sale: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.get("/api/sales")
+async def get_sales(
+    request: Request,
+    user: models.User = Depends(require_auth),
+    db: Session = Depends(get_db),
+    page: int = 1,
+    limit: int = 20
+):
+    org_id = request.session.get("org_id")
+    offset = (page - 1) * limit
     
-    # Update customer credit balance if credit sale
-    if data["paymentMethod"] == "credit" and data.get("customerId"):
-        customer = db.query(models.Customer).filter(models.Customer.id == data["customerId"]).first()
-        if customer:
-            customer.current_balance += data.get("balance", 0)
+    query = db.query(models.SalesOrder).filter(models.SalesOrder.organization_id == org_id)
+    total = query.count()
+    sales = query.order_by(models.SalesOrder.created_at.desc()).offset(offset).limit(limit).all()
     
-    db.commit()
+    result = []
+    for sale in sales:
+        result.append({
+            "id": sale.id,
+            "sale_number": sale.sale_number,
+            "date": sale.created_at.isoformat(),
+            "customer_name": sale.customer.full_name if sale.customer else "Walk-in Customer",
+            "total": float(sale.total),
+            "payment_method": sale.payment_method.value,
+            "status": sale.status.value if sale.status else "completed"
+        })
     
-    return {"success": True, "sale_id": sale.id, "sale_number": sale.sale_number}
+    return {
+        "items": result,
+        "total": total,
+        "page": page,
+        "limit": limit,
+        "pages": (total + limit - 1) // limit
+    }
+
+# ==================== CUSTOMER MANAGEMENT ====================
+@app.get("/customers", response_class=HTMLResponse)
+async def customers_page(request: Request, user: models.User = Depends(require_auth)):
+    return templates.TemplateResponse("customers.html", {"request": request, "user": user})
+
+@app.get("/api/customers")
+async def get_customers(
+    request: Request,
+    user: models.User = Depends(require_auth),
+    db: Session = Depends(get_db),
+    page: int = 1,
+    limit: int = 20,
+    search: str = ""
+):
+    org_id = request.session.get("org_id")
+    offset = (page - 1) * limit
+    
+    query = db.query(models.Customer).filter(models.Customer.organization_id == org_id)
+    
+    if search:
+        query = query.filter(
+            or_(
+                models.Customer.first_name.ilike(f"%{search}%"),
+                models.Customer.last_name.ilike(f"%{search}%"),
+                models.Customer.email.ilike(f"%{search}%"),
+                models.Customer.phone.ilike(f"%{search}%")
+            )
+        )
+    
+    total = query.count()
+    customers = query.offset(offset).limit(limit).all()
+    
+    result = []
+    for customer in customers:
+        result.append({
+            "id": customer.id,
+            "first_name": customer.first_name,
+            "last_name": customer.last_name,
+            "full_name": customer.full_name,
+            "email": customer.email,
+            "phone": customer.phone,
+            "address": customer.address,
+            "allow_credit": customer.allow_credit,
+            "credit_limit": float(customer.credit_limit) if customer.credit_limit else 0,
+            "current_balance": float(customer.current_balance) if customer.current_balance else 0
+        })
+    
+    return {
+        "items": result,
+        "total": total,
+        "page": page,
+        "limit": limit,
+        "pages": (total + limit - 1) // limit
+    }
+
+@app.post("/api/customers")
+async def add_customer(
+    request: Request,
+    user: models.User = Depends(require_auth),
+    db: Session = Depends(get_db)
+):
+    data = await request.json()
+    org_id = request.session.get("org_id")
+    
+    try:
+        customer = models.Customer(
+            id=str(uuid.uuid4()),
+            organization_id=org_id,
+            first_name=data["first_name"],
+            last_name=data["last_name"],
+            email=data.get("email", ""),
+            phone=data.get("phone", ""),
+            address=data.get("address", ""),
+            date_of_birth=datetime.strptime(data["date_of_birth"], "%Y-%m-%d").date() if data.get("date_of_birth") else None,
+            allergies=data.get("allergies", ""),
+            medical_conditions=data.get("medical_conditions", ""),
+            allow_credit=data.get("allow_credit", False),
+            credit_limit=data.get("credit_limit", 0),
+            current_balance=0
+        )
+        db.add(customer)
+        db.commit()
+        
+        return {"success": True, "id": customer.id}
+        
+    except Exception as e:
+        db.rollback()
+        print(f"Error adding customer: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.put("/api/customers/{customer_id}")
+async def update_customer(
+    customer_id: str,
+    request: Request,
+    user: models.User = Depends(require_auth),
+    db: Session = Depends(get_db)
+):
+    data = await request.json()
+    org_id = request.session.get("org_id")
+    
+    customer = db.query(models.Customer).filter(
+        models.Customer.id == customer_id,
+        models.Customer.organization_id == org_id
+    ).first()
+    
+    if not customer:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    
+    try:
+        for key, value in data.items():
+            if hasattr(customer, key) and key not in ["id", "organization_id", "created_at"]:
+                if key == "date_of_birth" and value:
+                    setattr(customer, key, datetime.strptime(value, "%Y-%m-%d").date())
+                else:
+                    setattr(customer, key, value)
+        
+        db.commit()
+        return {"success": True}
+        
+    except Exception as e:
+        db.rollback()
+        print(f"Error updating customer: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/api/customers/{customer_id}/payment")
+async def add_customer_payment(
+    customer_id: str,
+    request: Request,
+    user: models.User = Depends(require_auth),
+    db: Session = Depends(get_db)
+):
+    data = await request.json()
+    org_id = request.session.get("org_id")
+    
+    customer = db.query(models.Customer).filter(
+        models.Customer.id == customer_id,
+        models.Customer.organization_id == org_id
+    ).first()
+    
+    if not customer:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    
+    try:
+        amount = data.get("amount", 0)
+        if amount <= 0:
+            raise HTTPException(status_code=400, detail="Invalid payment amount")
+        
+        # Update customer balance
+        customer.current_balance -= amount
+        
+        # Record payment
+        payment = models.Payment(
+            id=str(uuid.uuid4()),
+            organization_id=org_id,
+            customer_id=customer_id,
+            amount=amount,
+            payment_date=datetime.now().date(),
+            payment_method=models.PaymentMethodEnum(data.get("payment_method", "cash")),
+            reference=data.get("reference", ""),
+            notes=data.get("notes", ""),
+            created_by=user.id
+        )
+        db.add(payment)
+        db.commit()
+        
+        return {"success": True, "new_balance": float(customer.current_balance)}
+        
+    except Exception as e:
+        db.rollback()
+        print(f"Error adding payment: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+# ==================== STAFF MANAGEMENT ====================
+@app.get("/staff", response_class=HTMLResponse)
+async def staff_page(request: Request, user: models.User = Depends(require_role("admin"))):
+    return templates.TemplateResponse("staff.html", {"request": request, "user": user})
+
+@app.get("/api/staff")
+async def get_staff(
+    request: Request,
+    user: models.User = Depends(require_role("admin")),
+    db: Session = Depends(get_db)
+):
+    org_id = request.session.get("org_id")
+    
+    staff = db.query(models.User).filter(
+        models.User.organization_id == org_id,
+        models.User.role != models.UserRoleEnum.admin
+    ).all()
+    
+    result = []
+    for member in staff:
+        result.append({
+            "id": member.id,
+            "username": member.username,
+            "email": member.email,
+            "full_name": member.full_name,
+            "role": member.role.value,
+            "is_active": member.is_active,
+            "phone": member.phone,
+            "created_at": member.created_at.isoformat()
+        })
+    
+    return result
+
+@app.post("/api/staff")
+async def add_staff(
+    request: Request,
+    user: models.User = Depends(require_role("admin")),
+    db: Session = Depends(get_db)
+):
+    data = await request.json()
+    org_id = request.session.get("org_id")
+    
+    try:
+        # Check if email exists
+        existing = db.query(models.User).filter(models.User.email == data["email"]).first()
+        if existing:
+            raise HTTPException(status_code=400, detail="Email already exists")
+        
+        # Hash password
+        hashed_password = hash_password(data["password"])
+        
+        # Create staff user
+        staff = models.User(
+            id=str(uuid.uuid4()),
+            organization_id=org_id,
+            username=data["username"],
+            email=data["email"],
+            password_hash=hashed_password,
+            full_name=data["full_name"],
+            role=models.UserRoleEnum(data["role"]),
+            is_active=data.get("is_active", True),
+            phone=data.get("phone", "")
+        )
+        db.add(staff)
+        db.commit()
+        
+        return {"success": True, "id": staff.id}
+        
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        db.rollback()
+        print(f"Error adding staff: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.put("/api/staff/{staff_id}")
+async def update_staff(
+    staff_id: str,
+    request: Request,
+    user: models.User = Depends(require_role("admin")),
+    db: Session = Depends(get_db)
+):
+    data = await request.json()
+    org_id = request.session.get("org_id")
+    
+    staff = db.query(models.User).filter(
+        models.User.id == staff_id,
+        models.User.organization_id == org_id
+    ).first()
+    
+    if not staff:
+        raise HTTPException(status_code=404, detail="Staff member not found")
+    
+    try:
+        for key, value in data.items():
+            if hasattr(staff, key) and key not in ["id", "organization_id", "created_at", "password_hash"]:
+                if key == "role":
+                    setattr(staff, key, models.UserRoleEnum(value))
+                else:
+                    setattr(staff, key, value)
+        
+        # Update password if provided
+        if data.get("password"):
+            staff.password_hash = hash_password(data["password"])
+        
+        db.commit()
+        return {"success": True}
+        
+    except Exception as e:
+        db.rollback()
+        print(f"Error updating staff: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.delete("/api/staff/{staff_id}")
+async def delete_staff(
+    staff_id: str,
+    request: Request,
+    user: models.User = Depends(require_role("admin")),
+    db: Session = Depends(get_db)
+):
+    org_id = request.session.get("org_id")
+    
+    # Don't allow deleting self
+    if staff_id == user.id:
+        raise HTTPException(status_code=400, detail="Cannot delete your own account")
+    
+    staff = db.query(models.User).filter(
+        models.User.id == staff_id,
+        models.User.organization_id == org_id
+    ).first()
+    
+    if not staff:
+        raise HTTPException(status_code=404, detail="Staff member not found")
+    
+    try:
+        db.delete(staff)
+        db.commit()
+        return {"success": True}
+        
+    except Exception as e:
+        db.rollback()
+        print(f"Error deleting staff: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+# ==================== AI CHAT ====================
+@app.get("/ai-chat", response_class=HTMLResponse)
+async def ai_chat_page(request: Request, user: models.User = Depends(require_auth)):
+    return templates.TemplateResponse("ai_chat.html", {"request": request, "user": user})
 
 @app.post("/api/ai/chat")
-async def ai_chat(request: Request, user: models.User = Depends(require_auth), db: Session = Depends(get_db)):
+async def ai_chat(
+    request: Request, 
+    user: models.User = Depends(require_auth), 
+    db: Session = Depends(get_db)
+):
     """AI chat endpoint"""
     data = await request.json()
     message = data.get("message")
     session_id = data.get("sessionId")
     
+    if not message:
+        raise HTTPException(status_code=400, detail="Message is required")
+    
     # Create or get session
     if not session_id:
         chat_session = models.AIChatSession(
+            id=str(uuid.uuid4()),
             user_id=user.id, 
             title=message[:50] + "..." if len(message) > 50 else message
         )
@@ -1028,17 +1336,20 @@ async def ai_chat(request: Request, user: models.User = Depends(require_auth), d
     
     # Save user message
     user_msg = models.AIChatMessage(
+        id=str(uuid.uuid4()),
         session_id=session_id,
         role="user",
         content=message
     )
     db.add(user_msg)
+    db.flush()
     
     # Get AI response from Cohere
     response = await cohere_service.get_drug_information(message)
     
     # Save AI response
     ai_msg = models.AIChatMessage(
+        id=str(uuid.uuid4()),
         session_id=session_id,
         role="assistant",
         content=response
@@ -1048,28 +1359,131 @@ async def ai_chat(request: Request, user: models.User = Depends(require_auth), d
     
     return {"sessionId": session_id, "response": response}
 
-# ==================== SIMPLE PAGES ====================
-@app.get("/inventory", response_class=HTMLResponse)
-async def inventory_page(request: Request, user: models.User = Depends(require_auth)):
-    return templates.TemplateResponse("inventory.html", {"request": request, "user": user})
+@app.get("/api/ai/sessions")
+async def get_ai_sessions(
+    request: Request,
+    user: models.User = Depends(require_auth),
+    db: Session = Depends(get_db)
+):
+    """Get user's chat sessions"""
+    sessions = db.query(models.AIChatSession).filter(
+        models.AIChatSession.user_id == user.id
+    ).order_by(models.AIChatSession.updated_at.desc()).all()
+    
+    return [{
+        "id": s.id,
+        "title": s.title,
+        "created_at": s.created_at.isoformat(),
+        "updated_at": s.updated_at.isoformat()
+    } for s in sessions]
 
-@app.get("/sales", response_class=HTMLResponse)
-async def sales_page(request: Request, user: models.User = Depends(require_auth)):
-    return templates.TemplateResponse("pos.html", {"request": request, "user": user})
+@app.get("/api/ai/sessions/{session_id}/messages")
+async def get_ai_messages(
+    session_id: str,
+    request: Request,
+    user: models.User = Depends(require_auth),
+    db: Session = Depends(get_db)
+):
+    """Get messages for a chat session"""
+    # Verify session belongs to user
+    session = db.query(models.AIChatSession).filter(
+        models.AIChatSession.id == session_id,
+        models.AIChatSession.user_id == user.id
+    ).first()
+    
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    messages = db.query(models.AIChatMessage).filter(
+        models.AIChatMessage.session_id == session_id
+    ).order_by(models.AIChatMessage.created_at).all()
+    
+    return [{
+        "id": m.id,
+        "role": m.role,
+        "content": m.content,
+        "created_at": m.created_at.isoformat()
+    } for m in messages]
 
-@app.get("/customers", response_class=HTMLResponse)
-async def customers_page(request: Request, user: models.User = Depends(require_auth)):
-    return templates.TemplateResponse("customers.html", {"request": request, "user": user})
+# ==================== REPORTS ====================
+@app.get("/api/reports/sales")
+async def get_sales_report(
+    request: Request,
+    user: models.User = Depends(require_auth),
+    db: Session = Depends(get_db),
+    start_date: str = None,
+    end_date: str = None
+):
+    org_id = request.session.get("org_id")
+    
+    query = db.query(models.SalesOrder).filter(models.SalesOrder.organization_id == org_id)
+    
+    if start_date:
+        query = query.filter(models.SalesOrder.created_at >= datetime.fromisoformat(start_date))
+    if end_date:
+        query = query.filter(models.SalesOrder.created_at <= datetime.fromisoformat(end_date))
+    
+    sales = query.all()
+    
+    total_sales = sum(s.total for s in sales)
+    total_tax = sum(s.tax for s in sales)
+    total_discount = sum(s.discount for s in sales)
+    
+    # Group by day
+    daily_sales = {}
+    for sale in sales:
+        day = sale.created_at.date().isoformat()
+        if day not in daily_sales:
+            daily_sales[day] = 0
+        daily_sales[day] += float(sale.total)
+    
+    return {
+        "total_sales": float(total_sales),
+        "total_tax": float(total_tax),
+        "total_discount": float(total_discount),
+        "transaction_count": len(sales),
+        "daily_sales": daily_sales,
+        "sales": [{
+            "sale_number": s.sale_number,
+            "date": s.created_at.isoformat(),
+            "total": float(s.total),
+            "payment_method": s.payment_method.value
+        } for s in sales[:100]]  # Return last 100 sales
+    }
 
-@app.get("/staff", response_class=HTMLResponse)
-async def staff_page(request: Request, user: models.User = Depends(require_auth)):
-    if user.role.value != "admin":
-        raise HTTPException(status_code=403, detail="Admin only")
-    return templates.TemplateResponse("staff.html", {"request": request, "user": user})
-
-@app.get("/ai-chat", response_class=HTMLResponse)
-async def ai_chat_page(request: Request, user: models.User = Depends(require_auth)):
-    return templates.TemplateResponse("ai_chat.html", {"request": request, "user": user})
+@app.get("/api/reports/inventory")
+async def get_inventory_report(
+    request: Request,
+    user: models.User = Depends(require_auth),
+    db: Session = Depends(get_db)
+):
+    org_id = request.session.get("org_id")
+    
+    drugs = db.query(models.Drug).filter(models.Drug.organization_id == org_id).all()
+    
+    report = []
+    for drug in drugs:
+        total_stock = db.query(func.sum(models.InventoryBatch.quantity_on_hand)).filter(
+            models.InventoryBatch.drug_id == drug.id,
+            models.InventoryBatch.status == models.BatchStatusEnum.active
+        ).scalar() or 0
+        
+        total_value = total_stock * drug.price
+        
+        report.append({
+            "name": drug.name,
+            "stock": int(total_stock),
+            "price": float(drug.price),
+            "total_value": float(total_value),
+            "reorder_level": drug.reorder_level,
+            "status": "Low Stock" if total_stock < drug.reorder_level else "OK"
+        })
+    
+    return {
+        "items": report,
+        "total_items": len(report),
+        "total_inventory_value": sum(r["total_value"] for r in report)
+    }
 
 if __name__ == "__main__":
     import uvicorn
