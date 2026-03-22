@@ -1,7 +1,7 @@
 import bcrypt
 import types
 
-# BCrypt workaround - Fix for passlib/bcrypt compatibility issue
+# BCrypt workaround
 try:
     bcrypt.__about__
 except AttributeError:
@@ -26,8 +26,6 @@ import cohere
 import json
 import secrets
 import httpx
-import hashlib
-import hmac
 
 from database import engine, get_db, Base
 import models
@@ -41,8 +39,7 @@ TUMA_BASE_URL = "https://tuma.ke/api/v1"
 pwd_context = CryptContext(
     schemes=["pbkdf2_sha256", "bcrypt"],
     deprecated="auto",
-    pbkdf2_sha256__default_rounds=30000,
-    pbkdf2_sha256__salt_size=16
+    pbkdf2_sha256__default_rounds=30000
 )
 
 def hash_password(password: str) -> str:
@@ -51,11 +48,7 @@ def hash_password(password: str) -> str:
         raise ValueError("Password must be at least 6 characters")
     if len(password) > 128:
         raise ValueError("Password must be 128 characters or less")
-    try:
-        return pwd_context.hash(password, scheme="pbkdf2_sha256")
-    except Exception as e:
-        from passlib.hash import pbkdf2_sha256
-        return pbkdf2_sha256.hash(password)
+    return pwd_context.hash(password, scheme="pbkdf2_sha256")
 
 def verify_password(password: str, hashed_password: str) -> bool:
     password = str(password).strip()
@@ -66,17 +59,7 @@ def verify_password(password: str, hashed_password: str) -> bool:
     try:
         return pwd_context.verify(password, hashed_password)
     except Exception as e:
-        from passlib.hash import pbkdf2_sha256, bcrypt
-        try:
-            if pbkdf2_sha256.verify(password, hashed_password):
-                return True
-        except:
-            pass
-        try:
-            if bcrypt.verify(password, hashed_password):
-                return True
-        except:
-            pass
+        print(f"Verification error: {e}")
         return False
 
 # ==================== TUMA MPESA SERVICE ====================
@@ -87,11 +70,9 @@ class TumaMpesaService:
         self.base_url = TUMA_BASE_URL
     
     async def initiate_payment(self, amount: float, phone: str, reference: str = None) -> dict:
-        """Initiate MPesa payment via Tuma"""
         if not reference:
             reference = f"INV-{datetime.now().strftime('%Y%m%d%H%M%S')}"
         
-        # Clean phone number (remove leading 0 or +254)
         phone = phone.strip()
         if phone.startswith('0'):
             phone = '254' + phone[1:]
@@ -108,7 +89,7 @@ class TumaMpesaService:
                         "amount": amount,
                         "phone": phone,
                         "reference": reference,
-                        "callback_url": f"https://pharmacyos-1.onrender.com/api/payment/callback"
+                        "callback_url": "https://pharmacyos-1.onrender.com/api/payment/callback"
                     },
                     timeout=30.0
                 )
@@ -123,18 +104,11 @@ class TumaMpesaService:
                         "status": "pending"
                     }
                 else:
-                    return {
-                        "success": False,
-                        "error": f"Payment initiation failed: {response.text}"
-                    }
+                    return {"success": False, "error": f"Payment initiation failed: {response.text}"}
             except Exception as e:
-                return {
-                    "success": False,
-                    "error": str(e)
-                }
+                return {"success": False, "error": str(e)}
     
     async def check_payment_status(self, payment_id: str) -> dict:
-        """Check payment status"""
         async with httpx.AsyncClient() as client:
             try:
                 response = await client.get(
@@ -152,15 +126,9 @@ class TumaMpesaService:
                         "reference": data.get("reference")
                     }
                 else:
-                    return {
-                        "success": False,
-                        "error": "Failed to check payment status"
-                    }
+                    return {"success": False, "error": "Failed to check payment status"}
             except Exception as e:
-                return {
-                    "success": False,
-                    "error": str(e)
-                }
+                return {"success": False, "error": str(e)}
 
 # ==================== COHERE AI SERVICE ====================
 class CohereService:
@@ -372,10 +340,11 @@ app = FastAPI(title="PharmaSaaS - Pharmacy Management System")
 
 SECRET_KEY = os.getenv("SESSION_SECRET", secrets.token_urlsafe(32))
 
+# Add session middleware
 app.add_middleware(
     SessionMiddleware, 
     secret_key=SECRET_KEY,
-    max_age=86400,
+    max_age=86400,  # 24 hours
     same_site="lax",
     https_only=False
 )
@@ -388,6 +357,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Mount static files and templates
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
@@ -400,6 +370,7 @@ def get_current_user(request: Request, db: Session = Depends(get_db)):
     user_id = request.session.get("user_id")
     if not user_id:
         return None
+    
     try:
         user = db.query(models.User).filter(
             models.User.id == user_id,
@@ -427,14 +398,14 @@ def require_role(*roles):
 @app.get("/", response_class=HTMLResponse)
 async def landing_page(request: Request):
     if request.session.get("user_id"):
-        return RedirectResponse(url="/dashboard", status_code=303)
+        return RedirectResponse(url="/dashboard", status_code=302)
     return templates.TemplateResponse("landing.html", {"request": request})
 
 # ==================== REGISTRATION ====================
 @app.get("/register", response_class=HTMLResponse)
 async def register_page(request: Request):
     if request.session.get("user_id"):
-        return RedirectResponse(url="/dashboard", status_code=303)
+        return RedirectResponse(url="/dashboard", status_code=302)
     return templates.TemplateResponse("register.html", {"request": request})
 
 @app.post("/register")
@@ -507,7 +478,7 @@ async def register(
         request.session["role"] = user.role.value
         request.session["org_id"] = user.organization_id
         
-        return RedirectResponse(url="/dashboard", status_code=303)
+        return RedirectResponse(url="/dashboard", status_code=302)
         
     except Exception as e:
         db.rollback()
@@ -520,7 +491,7 @@ async def register(
 @app.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
     if request.session.get("user_id"):
-        return RedirectResponse(url="/dashboard", status_code=303)
+        return RedirectResponse(url="/dashboard", status_code=302)
     return templates.TemplateResponse("login.html", {"request": request})
 
 @app.post("/login")
@@ -536,7 +507,12 @@ async def login(
         
         user = db.query(models.User).filter(models.User.email == email).first()
         
-        if not user or not verify_password(password, user.password_hash):
+        if not user:
+            return templates.TemplateResponse("login.html", {
+                "request": request, "error": "Invalid email or password"
+            })
+        
+        if not verify_password(password, user.password_hash):
             return templates.TemplateResponse("login.html", {
                 "request": request, "error": "Invalid email or password"
             })
@@ -546,14 +522,20 @@ async def login(
                 "request": request, "error": "Your account is pending approval"
             })
         
+        # Set session
         request.session["user_id"] = user.id
         request.session["role"] = user.role.value
         request.session["org_id"] = user.organization_id
         
-        return RedirectResponse(url="/dashboard", status_code=303)
+        # Log the session for debugging
+        print(f"User logged in: {email}, session ID: {request.session.get('user_id')}")
+        
+        return RedirectResponse(url="/dashboard", status_code=302)
         
     except Exception as e:
         print(f"Login error: {e}")
+        import traceback
+        traceback.print_exc()
         return templates.TemplateResponse("login.html", {
             "request": request, "error": "An error occurred. Please try again."
         })
@@ -561,13 +543,23 @@ async def login(
 @app.get("/logout")
 async def logout(request: Request):
     request.session.clear()
-    response = RedirectResponse(url="/", status_code=303)
+    response = RedirectResponse(url="/", status_code=302)
     response.delete_cookie("session")
     return response
 
 # ==================== DASHBOARD ====================
 @app.get("/dashboard", response_class=HTMLResponse)
-async def dashboard(request: Request, user: models.User = Depends(require_auth), db: Session = Depends(get_db)):
+async def dashboard(request: Request, db: Session = Depends(get_db)):
+    # Check authentication manually to avoid redirect loop
+    user_id = request.session.get("user_id")
+    if not user_id:
+        return RedirectResponse(url="/login", status_code=302)
+    
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user or not user.is_active:
+        request.session.clear()
+        return RedirectResponse(url="/login", status_code=302)
+    
     org_id = request.session.get("org_id")
     
     total_products = db.query(models.Drug).filter(models.Drug.organization_id == org_id).count()
@@ -606,18 +598,30 @@ async def dashboard(request: Request, user: models.User = Depends(require_auth),
 
 # ==================== INVENTORY MANAGEMENT ====================
 @app.get("/inventory", response_class=HTMLResponse)
-async def inventory_page(request: Request, user: models.User = Depends(require_auth)):
+async def inventory_page(request: Request, db: Session = Depends(get_db)):
+    user_id = request.session.get("user_id")
+    if not user_id:
+        return RedirectResponse(url="/login", status_code=302)
+    
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        request.session.clear()
+        return RedirectResponse(url="/login", status_code=302)
+    
     return templates.TemplateResponse("inventory.html", {"request": request, "user": user})
 
 @app.get("/api/inventory")
 async def get_inventory(
     request: Request, 
-    user: models.User = Depends(require_auth), 
     db: Session = Depends(get_db),
     page: int = 1,
     limit: int = 20,
     search: str = ""
 ):
+    user_id = request.session.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
     org_id = request.session.get("org_id")
     offset = (page - 1) * limit
     
@@ -664,139 +668,30 @@ async def get_inventory(
         "pages": (total + limit - 1) // limit
     }
 
-@app.post("/api/inventory")
-async def add_inventory(
-    request: Request,
-    user: models.User = Depends(require_auth),
-    db: Session = Depends(get_db)
-):
-    data = await request.json()
-    org_id = request.session.get("org_id")
-    
-    try:
-        drug = models.Drug(
-            id=str(uuid.uuid4()),
-            organization_id=org_id,
-            name=data["name"],
-            generic_name=data.get("generic_name", ""),
-            manufacturer=data.get("manufacturer", ""),
-            form=models.DrugFormEnum(data["form"]),
-            strength=data.get("strength", 0),
-            strength_unit=models.StrengthUnitEnum(data.get("strength_unit", "mg")),
-            category_id=data.get("category_id"),
-            supplier_id=data.get("supplier_id"),
-            description=data.get("description", ""),
-            usage_instructions=data.get("usage_instructions", ""),
-            side_effects=data.get("side_effects", ""),
-            contraindications=data.get("contraindications", ""),
-            price=data.get("price", 0),
-            reorder_level=data.get("reorder_level", 50),
-            barcode=data.get("barcode", "")
-        )
-        db.add(drug)
-        db.flush()
-        
-        if data.get("initial_quantity", 0) > 0:
-            batch = models.InventoryBatch(
-                id=str(uuid.uuid4()),
-                drug_id=drug.id,
-                lot_number=data.get("lot_number", f"LOT-{datetime.now().strftime('%Y%m%d')}"),
-                quantity_on_hand=data["initial_quantity"],
-                expiry_date=datetime.strptime(data["expiry_date"], "%Y-%m-%d").date() if data.get("expiry_date") else None,
-                purchase_date=datetime.now().date(),
-                cost_price=data.get("cost_price", drug.price * 0.6),
-                status=models.BatchStatusEnum.active
-            )
-            db.add(batch)
-        
-        db.commit()
-        return {"success": True, "id": drug.id}
-        
-    except Exception as e:
-        db.rollback()
-        print(f"Error adding inventory: {e}")
-        raise HTTPException(status_code=400, detail=str(e))
-
-@app.put("/api/inventory/{drug_id}")
-async def update_inventory(
-    drug_id: str,
-    request: Request,
-    user: models.User = Depends(require_auth),
-    db: Session = Depends(get_db)
-):
-    data = await request.json()
-    org_id = request.session.get("org_id")
-    
-    drug = db.query(models.Drug).filter(
-        models.Drug.id == drug_id,
-        models.Drug.organization_id == org_id
-    ).first()
-    
-    if not drug:
-        raise HTTPException(status_code=404, detail="Product not found")
-    
-    try:
-        for key, value in data.items():
-            if hasattr(drug, key) and key not in ["id", "organization_id", "created_at"]:
-                if key == "form":
-                    setattr(drug, key, models.DrugFormEnum(value))
-                elif key == "strength_unit":
-                    setattr(drug, key, models.StrengthUnitEnum(value))
-                else:
-                    setattr(drug, key, value)
-        
-        db.commit()
-        return {"success": True}
-        
-    except Exception as e:
-        db.rollback()
-        print(f"Error updating inventory: {e}")
-        raise HTTPException(status_code=400, detail=str(e))
-
-@app.delete("/api/inventory/{drug_id}")
-async def delete_inventory(
-    drug_id: str,
-    request: Request,
-    user: models.User = Depends(require_role("admin")),
-    db: Session = Depends(get_db)
-):
-    org_id = request.session.get("org_id")
-    
-    drug = db.query(models.Drug).filter(
-        models.Drug.id == drug_id,
-        models.Drug.organization_id == org_id
-    ).first()
-    
-    if not drug:
-        raise HTTPException(status_code=404, detail="Product not found")
-    
-    has_sales = db.query(models.SalesLineItem).filter(models.SalesLineItem.drug_id == drug_id).first()
-    if has_sales:
-        raise HTTPException(status_code=400, detail="Cannot delete product with existing sales")
-    
-    try:
-        db.query(models.InventoryBatch).filter(models.InventoryBatch.drug_id == drug_id).delete()
-        db.delete(drug)
-        db.commit()
-        return {"success": True}
-        
-    except Exception as e:
-        db.rollback()
-        print(f"Error deleting inventory: {e}")
-        raise HTTPException(status_code=400, detail=str(e))
-
 # ==================== POINT OF SALE ====================
 @app.get("/sales", response_class=HTMLResponse)
-async def sales_page(request: Request, user: models.User = Depends(require_auth)):
+async def sales_page(request: Request, db: Session = Depends(get_db)):
+    user_id = request.session.get("user_id")
+    if not user_id:
+        return RedirectResponse(url="/login", status_code=302)
+    
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        request.session.clear()
+        return RedirectResponse(url="/login", status_code=302)
+    
     return templates.TemplateResponse("pos.html", {"request": request, "user": user})
 
 @app.get("/api/product_by_barcode")
 async def get_product_by_barcode(
     code: str, 
     request: Request, 
-    user: models.User = Depends(require_auth), 
     db: Session = Depends(get_db)
 ):
+    user_id = request.session.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
     org_id = request.session.get("org_id")
     
     product = db.query(models.Drug).filter(
@@ -824,9 +719,12 @@ async def get_product_by_barcode(
 async def search_products(
     request: Request,
     q: str,
-    user: models.User = Depends(require_auth),
     db: Session = Depends(get_db)
 ):
+    user_id = request.session.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
     org_id = request.session.get("org_id")
     
     products = db.query(models.Drug).filter(
@@ -858,9 +756,16 @@ async def search_products(
 @app.post("/api/sales")
 async def create_sale(
     request: Request, 
-    user: models.User = Depends(require_auth), 
     db: Session = Depends(get_db)
 ):
+    user_id = request.session.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+    
     data = await request.json()
     org_id = request.session.get("org_id")
     
@@ -929,55 +834,32 @@ async def create_sale(
         print(f"Error creating sale: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
-@app.get("/api/sales")
-async def get_sales(
-    request: Request,
-    user: models.User = Depends(require_auth),
-    db: Session = Depends(get_db),
-    page: int = 1,
-    limit: int = 20
-):
-    org_id = request.session.get("org_id")
-    offset = (page - 1) * limit
-    
-    query = db.query(models.SalesOrder).filter(models.SalesOrder.organization_id == org_id)
-    total = query.count()
-    sales = query.order_by(models.SalesOrder.created_at.desc()).offset(offset).limit(limit).all()
-    
-    result = []
-    for sale in sales:
-        result.append({
-            "id": sale.id,
-            "sale_number": sale.sale_number,
-            "date": sale.created_at.isoformat(),
-            "customer_name": sale.customer.full_name if sale.customer else "Walk-in Customer",
-            "total": float(sale.total),
-            "payment_method": sale.payment_method.value,
-            "status": sale.status.value if sale.status else "completed"
-        })
-    
-    return {
-        "items": result,
-        "total": total,
-        "page": page,
-        "limit": limit,
-        "pages": (total + limit - 1) // limit
-    }
-
 # ==================== CUSTOMER MANAGEMENT ====================
 @app.get("/customers", response_class=HTMLResponse)
-async def customers_page(request: Request, user: models.User = Depends(require_auth)):
+async def customers_page(request: Request, db: Session = Depends(get_db)):
+    user_id = request.session.get("user_id")
+    if not user_id:
+        return RedirectResponse(url="/login", status_code=302)
+    
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        request.session.clear()
+        return RedirectResponse(url="/login", status_code=302)
+    
     return templates.TemplateResponse("customers.html", {"request": request, "user": user})
 
 @app.get("/api/customers")
 async def get_customers(
     request: Request,
-    user: models.User = Depends(require_auth),
     db: Session = Depends(get_db),
     page: int = 1,
     limit: int = 20,
     search: str = ""
 ):
+    user_id = request.session.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
     org_id = request.session.get("org_id")
     offset = (page - 1) * limit
     
@@ -1019,237 +901,33 @@ async def get_customers(
         "pages": (total + limit - 1) // limit
     }
 
-@app.post("/api/customers")
-async def add_customer(
-    request: Request,
-    user: models.User = Depends(require_auth),
-    db: Session = Depends(get_db)
-):
-    data = await request.json()
-    org_id = request.session.get("org_id")
-    
-    try:
-        customer = models.Customer(
-            id=str(uuid.uuid4()),
-            organization_id=org_id,
-            first_name=data["first_name"],
-            last_name=data["last_name"],
-            email=data.get("email", ""),
-            phone=data.get("phone", ""),
-            address=data.get("address", ""),
-            date_of_birth=datetime.strptime(data["date_of_birth"], "%Y-%m-%d").date() if data.get("date_of_birth") else None,
-            allergies=data.get("allergies", ""),
-            medical_conditions=data.get("medical_conditions", ""),
-            allow_credit=data.get("allow_credit", False),
-            credit_limit=data.get("credit_limit", 0),
-            current_balance=0
-        )
-        db.add(customer)
-        db.commit()
-        return {"success": True, "id": customer.id}
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=400, detail=str(e))
-
-@app.put("/api/customers/{customer_id}")
-async def update_customer(
-    customer_id: str,
-    request: Request,
-    user: models.User = Depends(require_auth),
-    db: Session = Depends(get_db)
-):
-    data = await request.json()
-    org_id = request.session.get("org_id")
-    
-    customer = db.query(models.Customer).filter(
-        models.Customer.id == customer_id,
-        models.Customer.organization_id == org_id
-    ).first()
-    
-    if not customer:
-        raise HTTPException(status_code=404, detail="Customer not found")
-    
-    try:
-        for key, value in data.items():
-            if hasattr(customer, key) and key not in ["id", "organization_id", "created_at"]:
-                if key == "date_of_birth" and value:
-                    setattr(customer, key, datetime.strptime(value, "%Y-%m-%d").date())
-                else:
-                    setattr(customer, key, value)
-        db.commit()
-        return {"success": True}
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=400, detail=str(e))
-
-@app.post("/api/customers/{customer_id}/payment")
-async def add_customer_payment(
-    customer_id: str,
-    request: Request,
-    user: models.User = Depends(require_auth),
-    db: Session = Depends(get_db)
-):
-    data = await request.json()
-    org_id = request.session.get("org_id")
-    
-    customer = db.query(models.Customer).filter(
-        models.Customer.id == customer_id,
-        models.Customer.organization_id == org_id
-    ).first()
-    
-    if not customer:
-        raise HTTPException(status_code=404, detail="Customer not found")
-    
-    try:
-        amount = data.get("amount", 0)
-        if amount <= 0:
-            raise HTTPException(status_code=400, detail="Invalid payment amount")
-        
-        customer.current_balance -= amount
-        db.commit()
-        return {"success": True, "new_balance": float(customer.current_balance)}
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=400, detail=str(e))
-
-# ==================== STAFF MANAGEMENT ====================
-@app.get("/staff", response_class=HTMLResponse)
-async def staff_page(request: Request, user: models.User = Depends(require_role("admin"))):
-    return templates.TemplateResponse("staff.html", {"request": request, "user": user})
-
-@app.get("/api/staff")
-async def get_staff(
-    request: Request,
-    user: models.User = Depends(require_role("admin")),
-    db: Session = Depends(get_db)
-):
-    org_id = request.session.get("org_id")
-    
-    staff = db.query(models.User).filter(
-        models.User.organization_id == org_id,
-        models.User.role != models.UserRoleEnum.admin
-    ).all()
-    
-    result = []
-    for member in staff:
-        result.append({
-            "id": member.id,
-            "username": member.username,
-            "email": member.email,
-            "full_name": member.full_name,
-            "role": member.role.value,
-            "is_active": member.is_active,
-            "phone": member.phone,
-            "created_at": member.created_at.isoformat()
-        })
-    return result
-
-@app.post("/api/staff")
-async def add_staff(
-    request: Request,
-    user: models.User = Depends(require_role("admin")),
-    db: Session = Depends(get_db)
-):
-    data = await request.json()
-    org_id = request.session.get("org_id")
-    
-    try:
-        existing = db.query(models.User).filter(models.User.email == data["email"]).first()
-        if existing:
-            raise HTTPException(status_code=400, detail="Email already exists")
-        
-        staff = models.User(
-            id=str(uuid.uuid4()),
-            organization_id=org_id,
-            username=data["username"],
-            email=data["email"],
-            password_hash=hash_password(data["password"]),
-            full_name=data["full_name"],
-            role=models.UserRoleEnum(data["role"]),
-            is_active=data.get("is_active", True),
-            phone=data.get("phone", "")
-        )
-        db.add(staff)
-        db.commit()
-        return {"success": True, "id": staff.id}
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=400, detail=str(e))
-
-@app.put("/api/staff/{staff_id}")
-async def update_staff(
-    staff_id: str,
-    request: Request,
-    user: models.User = Depends(require_role("admin")),
-    db: Session = Depends(get_db)
-):
-    data = await request.json()
-    org_id = request.session.get("org_id")
-    
-    staff = db.query(models.User).filter(
-        models.User.id == staff_id,
-        models.User.organization_id == org_id
-    ).first()
-    
-    if not staff:
-        raise HTTPException(status_code=404, detail="Staff member not found")
-    
-    try:
-        for key, value in data.items():
-            if hasattr(staff, key) and key not in ["id", "organization_id", "created_at", "password_hash"]:
-                if key == "role":
-                    setattr(staff, key, models.UserRoleEnum(value))
-                else:
-                    setattr(staff, key, value)
-        
-        if data.get("password"):
-            staff.password_hash = hash_password(data["password"])
-        
-        db.commit()
-        return {"success": True}
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=400, detail=str(e))
-
-@app.delete("/api/staff/{staff_id}")
-async def delete_staff(
-    staff_id: str,
-    request: Request,
-    user: models.User = Depends(require_role("admin")),
-    db: Session = Depends(get_db)
-):
-    org_id = request.session.get("org_id")
-    
-    if staff_id == user.id:
-        raise HTTPException(status_code=400, detail="Cannot delete your own account")
-    
-    staff = db.query(models.User).filter(
-        models.User.id == staff_id,
-        models.User.organization_id == org_id
-    ).first()
-    
-    if not staff:
-        raise HTTPException(status_code=404, detail="Staff member not found")
-    
-    try:
-        db.delete(staff)
-        db.commit()
-        return {"success": True}
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=400, detail=str(e))
-
 # ==================== AI CHAT ====================
 @app.get("/ai-chat", response_class=HTMLResponse)
-async def ai_chat_page(request: Request, user: models.User = Depends(require_auth)):
+async def ai_chat_page(request: Request, db: Session = Depends(get_db)):
+    user_id = request.session.get("user_id")
+    if not user_id:
+        return RedirectResponse(url="/login", status_code=302)
+    
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        request.session.clear()
+        return RedirectResponse(url="/login", status_code=302)
+    
     return templates.TemplateResponse("ai_chat.html", {"request": request, "user": user})
 
 @app.post("/api/ai/chat")
 async def ai_chat(
     request: Request, 
-    user: models.User = Depends(require_auth), 
     db: Session = Depends(get_db)
 ):
+    user_id = request.session.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+    
     data = await request.json()
     message = data.get("message")
     session_id = data.get("sessionId")
@@ -1289,57 +967,16 @@ async def ai_chat(
     
     return {"sessionId": session_id, "response": response}
 
-@app.get("/api/ai/sessions")
-async def get_ai_sessions(
-    request: Request,
-    user: models.User = Depends(require_auth),
-    db: Session = Depends(get_db)
-):
-    sessions = db.query(models.AIChatSession).filter(
-        models.AIChatSession.user_id == user.id
-    ).order_by(models.AIChatSession.updated_at.desc()).all()
-    
-    return [{
-        "id": s.id,
-        "title": s.title,
-        "created_at": s.created_at.isoformat(),
-        "updated_at": s.updated_at.isoformat()
-    } for s in sessions]
-
-@app.get("/api/ai/sessions/{session_id}/messages")
-async def get_ai_messages(
-    session_id: str,
-    request: Request,
-    user: models.User = Depends(require_auth),
-    db: Session = Depends(get_db)
-):
-    session = db.query(models.AIChatSession).filter(
-        models.AIChatSession.id == session_id,
-        models.AIChatSession.user_id == user.id
-    ).first()
-    
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
-    
-    messages = db.query(models.AIChatMessage).filter(
-        models.AIChatMessage.session_id == session_id
-    ).order_by(models.AIChatMessage.created_at).all()
-    
-    return [{
-        "id": m.id,
-        "role": m.role,
-        "content": m.content,
-        "created_at": m.created_at.isoformat()
-    } for m in messages]
-
 # ==================== TUMA MPESA PAYMENT ENDPOINTS ====================
 @app.post("/api/payment/mpesa/initiate")
 async def initiate_mpesa_payment(
     request: Request,
-    user: models.User = Depends(require_auth),
     db: Session = Depends(get_db)
 ):
-    """Initiate MPesa payment for a sale"""
+    user_id = request.session.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
     data = await request.json()
     sale_id = data.get("sale_id")
     phone = data.get("phone")
@@ -1348,7 +985,6 @@ async def initiate_mpesa_payment(
     if not sale_id or not phone or not amount:
         raise HTTPException(status_code=400, detail="Missing required fields")
     
-    # Get sale
     sale = db.query(models.SalesOrder).filter(
         models.SalesOrder.id == sale_id,
         models.SalesOrder.organization_id == request.session.get("org_id")
@@ -1357,7 +993,6 @@ async def initiate_mpesa_payment(
     if not sale:
         raise HTTPException(status_code=404, detail="Sale not found")
     
-    # Initiate payment with Tuma
     result = await tuma_service.initiate_payment(
         amount=amount,
         phone=phone,
@@ -1365,7 +1000,6 @@ async def initiate_mpesa_payment(
     )
     
     if result["success"]:
-        # Store payment record
         payment = models.Payment(
             id=str(uuid.uuid4()),
             organization_id=sale.organization_id,
@@ -1377,7 +1011,7 @@ async def initiate_mpesa_payment(
             reference=result["reference"],
             status="pending",
             transaction_id=result["payment_id"],
-            created_by=user.id
+            created_by=user_id
         )
         db.add(payment)
         db.commit()
@@ -1391,62 +1025,18 @@ async def initiate_mpesa_payment(
     else:
         raise HTTPException(status_code=400, detail=result.get("error", "Payment initiation failed"))
 
-@app.post("/api/payment/callback")
-async def payment_callback(request: Request):
-    """Webhook callback for Tuma payment status"""
-    try:
-        data = await request.json()
-        
-        # Verify webhook signature (implement based on Tuma's documentation)
-        payment_id = data.get("payment_id")
-        status = data.get("status")
-        reference = data.get("reference")
-        
-        if payment_id and status:
-            # Update payment record
-            db = next(get_db())
-            payment = db.query(models.Payment).filter(
-                models.Payment.transaction_id == payment_id
-            ).first()
-            
-            if payment:
-                payment.status = status
-                payment.completed_at = datetime.now()
-                
-                if status == "completed":
-                    # Update sale payment status
-                    sale = db.query(models.SalesOrder).filter(
-                        models.SalesOrder.id == payment.sale_id
-                    ).first()
-                    if sale:
-                        sale.amount_paid += payment.amount
-                        sale.balance = sale.total - sale.amount_paid
-                        if sale.balance <= 0:
-                            sale.payment_status = "paid"
-                        else:
-                            sale.payment_status = "partial"
-                
-                db.commit()
-            
-            db.close()
-        
-        return {"status": "received"}
-        
-    except Exception as e:
-        print(f"Payment callback error: {e}")
-        return {"status": "error", "message": str(e)}
-
 @app.get("/api/payment/status/{payment_id}")
 async def check_payment_status(
     payment_id: str,
-    request: Request,
-    user: models.User = Depends(require_auth)
+    request: Request
 ):
-    """Check payment status"""
+    user_id = request.session.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
     result = await tuma_service.check_payment_status(payment_id)
     
     if result["success"]:
-        # Update local record
         db = next(get_db())
         payment = db.query(models.Payment).filter(
             models.Payment.transaction_id == payment_id
@@ -1456,7 +1046,6 @@ async def check_payment_status(
             payment.status = result["status"]
             if result["status"] == "completed" and not payment.completed_at:
                 payment.completed_at = datetime.now()
-                # Update sale
                 sale = db.query(models.SalesOrder).filter(
                     models.SalesOrder.id == payment.sale_id
                 ).first()
@@ -1470,91 +1059,58 @@ async def check_payment_status(
     else:
         raise HTTPException(status_code=400, detail=result.get("error", "Failed to check status"))
 
-# ==================== REPORTS ====================
-@app.get("/api/reports/sales")
-async def get_sales_report(
-    request: Request,
-    user: models.User = Depends(require_auth),
-    db: Session = Depends(get_db),
-    start_date: str = None,
-    end_date: str = None
-):
-    org_id = request.session.get("org_id")
+# ==================== STAFF MANAGEMENT ====================
+@app.get("/staff", response_class=HTMLResponse)
+async def staff_page(request: Request, db: Session = Depends(get_db)):
+    user_id = request.session.get("user_id")
+    if not user_id:
+        return RedirectResponse(url="/login", status_code=302)
     
-    query = db.query(models.SalesOrder).filter(models.SalesOrder.organization_id == org_id)
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user or user.role.value != "admin":
+        return RedirectResponse(url="/dashboard", status_code=302)
     
-    if start_date:
-        query = query.filter(models.SalesOrder.created_at >= datetime.fromisoformat(start_date))
-    if end_date:
-        query = query.filter(models.SalesOrder.created_at <= datetime.fromisoformat(end_date))
-    
-    sales = query.all()
-    
-    total_sales = sum(s.total for s in sales)
-    total_tax = sum(s.tax for s in sales)
-    total_discount = sum(s.discount for s in sales)
-    
-    daily_sales = {}
-    for sale in sales:
-        day = sale.created_at.date().isoformat()
-        daily_sales[day] = daily_sales.get(day, 0) + float(sale.total)
-    
-    return {
-        "total_sales": float(total_sales),
-        "total_tax": float(total_tax),
-        "total_discount": float(total_discount),
-        "transaction_count": len(sales),
-        "daily_sales": daily_sales,
-        "sales": [{
-            "sale_number": s.sale_number,
-            "date": s.created_at.isoformat(),
-            "total": float(s.total),
-            "payment_method": s.payment_method.value
-        } for s in sales[:100]]
-    }
+    return templates.TemplateResponse("staff.html", {"request": request, "user": user})
 
-@app.get("/api/reports/inventory")
-async def get_inventory_report(
+@app.get("/api/staff")
+async def get_staff(
     request: Request,
-    user: models.User = Depends(require_auth),
     db: Session = Depends(get_db)
 ):
+    user_id = request.session.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user or user.role.value != "admin":
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
+    
     org_id = request.session.get("org_id")
     
-    drugs = db.query(models.Drug).filter(models.Drug.organization_id == org_id).all()
+    staff = db.query(models.User).filter(
+        models.User.organization_id == org_id,
+        models.User.role != models.UserRoleEnum.admin
+    ).all()
     
-    report = []
-    total_value = 0
-    
-    for drug in drugs:
-        total_stock = db.query(func.sum(models.InventoryBatch.quantity_on_hand)).filter(
-            models.InventoryBatch.drug_id == drug.id,
-            models.InventoryBatch.status == models.BatchStatusEnum.active
-        ).scalar() or 0
-        
-        value = total_stock * drug.price
-        total_value += value
-        
-        report.append({
-            "name": drug.name,
-            "stock": int(total_stock),
-            "price": float(drug.price),
-            "total_value": float(value),
-            "reorder_level": drug.reorder_level,
-            "status": "Low Stock" if total_stock < drug.reorder_level else "OK"
+    result = []
+    for member in staff:
+        result.append({
+            "id": member.id,
+            "username": member.username,
+            "email": member.email,
+            "full_name": member.full_name,
+            "role": member.role.value,
+            "is_active": member.is_active,
+            "phone": member.phone,
+            "created_at": member.created_at.isoformat()
         })
-    
-    return {
-        "items": report,
-        "total_items": len(report),
-        "total_inventory_value": float(total_value)
-    }
+    return result
 
 # ==================== ERROR HANDLER ====================
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
     if exc.status_code == 401:
-        return RedirectResponse(url="/login", status_code=303)
+        return RedirectResponse(url="/login", status_code=302)
     return JSONResponse(
         status_code=exc.status_code,
         content={"detail": exc.detail},
