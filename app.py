@@ -1,7 +1,7 @@
 import bcrypt
 import types
 
-# BCrypt workaround - Fix for passlib/bcrypt compatibility issue
+# BCrypt workaround
 try:
     bcrypt.__about__
 except AttributeError:
@@ -44,7 +44,6 @@ pwd_context = CryptContext(
 )
 
 def hash_password(password: str) -> str:
-    """Hash password with pbkdf2_sha256 (no 72-byte limit)."""
     password = str(password).strip()
     if len(password) < 6:
         raise ValueError("Password must be at least 6 characters")
@@ -53,7 +52,6 @@ def hash_password(password: str) -> str:
     return pwd_context.hash(password, scheme="pbkdf2_sha256")
 
 def verify_password(password: str, hashed_password: str) -> bool:
-    """Verify password against hash."""
     password = str(password).strip()
     if len(password) > 128:
         password = password[:128]
@@ -61,8 +59,7 @@ def verify_password(password: str, hashed_password: str) -> bool:
         return False
     try:
         return pwd_context.verify(password, hashed_password)
-    except Exception as e:
-        print(f"Verification error: {e}")
+    except:
         return False
 
 # ==================== TUMA MPESA SERVICE ====================
@@ -75,7 +72,6 @@ class TumaMpesaService:
     async def initiate_payment(self, amount: float, phone: str, reference: str = None) -> dict:
         if not reference:
             reference = f"INV-{datetime.now().strftime('%Y%m%d%H%M%S')}"
-        
         phone = phone.strip()
         if phone.startswith('0'):
             phone = '254' + phone[1:]
@@ -96,18 +92,10 @@ class TumaMpesaService:
                     },
                     timeout=30.0
                 )
-                
                 if response.status_code == 200:
                     data = response.json()
-                    return {
-                        "success": True,
-                        "payment_id": data.get("payment_id"),
-                        "reference": reference,
-                        "checkout_url": data.get("checkout_url"),
-                        "status": "pending"
-                    }
-                else:
-                    return {"success": False, "error": f"Payment initiation failed: {response.text}"}
+                    return {"success": True, "payment_id": data.get("payment_id"), "reference": reference}
+                return {"success": False, "error": "Payment initiation failed"}
             except Exception as e:
                 return {"success": False, "error": str(e)}
     
@@ -118,18 +106,10 @@ class TumaMpesaService:
                     f"{self.base_url}/payments/{payment_id}",
                     params={"api_key": self.api_key}
                 )
-                
                 if response.status_code == 200:
                     data = response.json()
-                    return {
-                        "success": True,
-                        "status": data.get("status"),
-                        "payment_id": payment_id,
-                        "amount": data.get("amount"),
-                        "reference": data.get("reference")
-                    }
-                else:
-                    return {"success": False, "error": "Failed to check payment status"}
+                    return {"success": True, "status": data.get("status")}
+                return {"success": False, "error": "Failed to check status"}
             except Exception as e:
                 return {"success": False, "error": str(e)}
 
@@ -142,248 +122,103 @@ class CohereService:
     
     async def get_drug_information(self, query: str) -> str:
         if not self.client:
-            return "AI assistant is not configured. Please add your COHERE_API_KEY to use this feature."
-        
+            return "AI assistant not configured. Please add COHERE_API_KEY."
         try:
             response = self.client.chat(
                 model=self.model,
                 message=query,
-                preamble="""You are an expert pharmacist assistant. Provide accurate, helpful information about:
-- Drug information, usage, and dosages
-- Drug interactions and contraindications
-- Side effects and warnings
-- Medical conditions and treatments
-- Medication safety and storage
-Always be clear, professional, and remind users to consult healthcare professionals for personalized advice.""",
+                preamble="You are an expert pharmacist assistant. Provide accurate information about drugs, dosages, interactions, and side effects. Always remind users to consult healthcare professionals.",
                 max_tokens=1024
             )
             return response.text
         except Exception as e:
-            return f"I'm sorry, I encountered an error: {str(e)}"
+            return f"Error: {str(e)}"
 
-# ==================== DATABASE INITIALIZATION ====================
+# ==================== DEMO DATA ====================
 def create_demo_data(db: Session):
-    """Create demo data for testing"""
-    existing_org = db.query(models.Organization).filter(models.Organization.name == "Demo Pharmacy").first()
-    if existing_org:
+    if db.query(models.Organization).filter(models.Organization.name == "Demo Pharmacy").first():
         return
     
     print("Creating demo data...")
     
     org = models.Organization(
-        id=str(uuid.uuid4()),
-        name="Demo Pharmacy",
-        slug="demo-pharmacy",
-        owner_email="admin@demo.com",
-        phone="555-0123",
-        address="123 Main Street, City, State",
-        subscription_plan="professional",
-        is_active=True
+        id=str(uuid.uuid4()), name="Demo Pharmacy", slug="demo-pharmacy",
+        owner_email="admin@demo.com", phone="555-0123", address="123 Main Street",
+        subscription_plan="professional", is_active=True
     )
     db.add(org)
     db.flush()
     
-    admin_user = models.User(
-        id=str(uuid.uuid4()),
-        organization_id=org.id,
-        username="admin",
-        email="admin@demo.com",
-        password_hash=hash_password("admin123"),
-        full_name="Demo Admin",
-        role=models.UserRoleEnum.admin,
-        is_active=True,
-        phone="555-0101"
+    admin = models.User(
+        id=str(uuid.uuid4()), organization_id=org.id, username="admin",
+        email="admin@demo.com", password_hash=hash_password("admin123"),
+        full_name="Demo Admin", role=models.UserRoleEnum.admin, is_active=True, phone="555-0101"
     )
-    
-    pharmacist_user = models.User(
-        id=str(uuid.uuid4()),
-        organization_id=org.id,
-        username="pharmacist",
-        email="pharmacist@demo.com",
-        password_hash=hash_password("pharmacist123"),
-        full_name="Demo Pharmacist",
-        role=models.UserRoleEnum.pharmacist,
-        is_active=True,
-        phone="555-0102"
+    pharmacist = models.User(
+        id=str(uuid.uuid4()), organization_id=org.id, username="pharmacist",
+        email="pharmacist@demo.com", password_hash=hash_password("pharmacist123"),
+        full_name="Demo Pharmacist", role=models.UserRoleEnum.pharmacist, is_active=True, phone="555-0102"
     )
-    
-    db.add_all([admin_user, pharmacist_user])
+    db.add_all([admin, pharmacist])
     db.flush()
     
-    category = models.Category(
-        id=str(uuid.uuid4()),
-        organization_id=org.id,
-        name="General Medicines",
-        description="General prescription and OTC medicines"
-    )
+    category = models.Category(id=str(uuid.uuid4()), organization_id=org.id, name="General Medicines")
     db.add(category)
     db.flush()
     
-    supplier = models.Supplier(
-        id=str(uuid.uuid4()),
-        organization_id=org.id,
-        name="MediSupplies Ltd",
-        contact_person="John Supplier",
-        email="supplies@medisupplies.com",
-        phone="555-0200",
-        address="456 Supply Street, City, State"
-    )
+    supplier = models.Supplier(id=str(uuid.uuid4()), organization_id=org.id, name="MediSupplies Ltd")
     db.add(supplier)
     db.flush()
     
-    demo_drugs = [
-        models.Drug(
-            id=str(uuid.uuid4()),
-            organization_id=org.id,
-            name="Paracetamol 500mg",
-            generic_name="Paracetamol",
-            manufacturer="Generic Pharma",
-            form=models.DrugFormEnum.tablet,
-            strength=500.0,
-            strength_unit=models.StrengthUnitEnum.mg,
-            category_id=category.id,
-            supplier_id=supplier.id,
-            description="Pain reliever and fever reducer",
-            usage_instructions="Take 1-2 tablets every 4-6 hours as needed",
-            side_effects="May cause nausea or rash in rare cases",
-            contraindications="Liver disease, alcohol dependence",
-            price=50.0,
-            reorder_level=100,
-            barcode="123456789012"
-        ),
-        models.Drug(
-            id=str(uuid.uuid4()),
-            organization_id=org.id,
-            name="Amoxicillin 500mg Capsules",
-            generic_name="Amoxicillin",
-            manufacturer="Antibio Labs",
-            form=models.DrugFormEnum.capsule,
-            strength=500.0,
-            strength_unit=models.StrengthUnitEnum.mg,
-            category_id=category.id,
-            supplier_id=supplier.id,
-            description="Broad-spectrum antibiotic",
-            usage_instructions="Take as prescribed, usually 3 times daily",
-            side_effects="Diarrhea, nausea, rash",
-            contraindications="Penicillin allergy",
-            price=150.0,
-            reorder_level=50,
-            barcode="123456789013"
-        ),
-        models.Drug(
-            id=str(uuid.uuid4()),
-            organization_id=org.id,
-            name="Ibuprofen 400mg",
-            generic_name="Ibuprofen",
-            manufacturer="PainFree Inc",
-            form=models.DrugFormEnum.tablet,
-            strength=400.0,
-            strength_unit=models.StrengthUnitEnum.mg,
-            category_id=category.id,
-            supplier_id=supplier.id,
-            description="NSAID for pain and inflammation",
-            usage_instructions="Take with food, 1 tablet every 6-8 hours",
-            side_effects="Stomach upset, dizziness",
-            contraindications="Stomach ulcers, kidney problems",
-            price=80.0,
-            reorder_level=75,
-            barcode="123456789014"
-        )
+    drugs = [
+        models.Drug(id=str(uuid.uuid4()), organization_id=org.id, name="Paracetamol 500mg", generic_name="Paracetamol", form=models.DrugFormEnum.tablet, strength=500.0, strength_unit=models.StrengthUnitEnum.mg, category_id=category.id, supplier_id=supplier.id, price=50.0, reorder_level=100, barcode="123456789012"),
+        models.Drug(id=str(uuid.uuid4()), organization_id=org.id, name="Amoxicillin 500mg", generic_name="Amoxicillin", form=models.DrugFormEnum.capsule, strength=500.0, strength_unit=models.StrengthUnitEnum.mg, category_id=category.id, supplier_id=supplier.id, price=150.0, reorder_level=50, barcode="123456789013"),
+        models.Drug(id=str(uuid.uuid4()), organization_id=org.id, name="Ibuprofen 400mg", generic_name="Ibuprofen", form=models.DrugFormEnum.tablet, strength=400.0, strength_unit=models.StrengthUnitEnum.mg, category_id=category.id, supplier_id=supplier.id, price=80.0, reorder_level=75, barcode="123456789014")
     ]
-    
-    db.add_all(demo_drugs)
+    db.add_all(drugs)
     db.flush()
     
-    for drug in demo_drugs:
-        batch = models.InventoryBatch(
-            id=str(uuid.uuid4()),
-            drug_id=drug.id,
-            lot_number=f"LOT-001-{drug.name[:5].upper()}",
-            quantity_on_hand=200,
-            expiry_date=date(2026, 12, 31),
-            purchase_date=date(2025, 1, 1),
-            cost_price=drug.price * 0.6,
-            status=models.BatchStatusEnum.active
-        )
-        db.add(batch)
+    for drug in drugs:
+        db.add(models.InventoryBatch(id=str(uuid.uuid4()), drug_id=drug.id, lot_number=f"LOT-{drug.name[:5]}", quantity_on_hand=200, expiry_date=date(2026,12,31), purchase_date=date(2025,1,1), cost_price=drug.price*0.6, status=models.BatchStatusEnum.active))
     
-    demo_customer = models.Customer(
-        id=str(uuid.uuid4()),
-        organization_id=org.id,
-        first_name="John",
-        last_name="Smith",
-        email="john.smith@example.com",
-        phone="555-0100",
-        address="789 Customer Ave, City, State",
-        date_of_birth=date(1985, 5, 15),
-        allergies="Penicillin, Sulfa drugs",
-        medical_conditions="Hypertension",
-        allow_credit=True,
-        credit_limit=5000.0,
-        current_balance=0.0
-    )
-    db.add(demo_customer)
-    
+    db.add(models.Customer(id=str(uuid.uuid4()), organization_id=org.id, first_name="John", last_name="Smith", email="john@example.com", phone="555-0100", allow_credit=True, credit_limit=5000.0, current_balance=0.0))
     db.commit()
-    print("Demo data created successfully!")
+    print("Demo data created!")
 
-# Create tables
 Base.metadata.create_all(bind=engine)
-
-# Create demo data
 db = next(get_db())
 try:
     create_demo_data(db)
-except Exception as e:
-    print(f"Error creating demo data: {e}")
+except:
     db.rollback()
 finally:
     db.close()
 
-# ==================== FASTAPI APP INITIALIZATION ====================
-app = FastAPI(title="PharmaSaaS - Pharmacy Management System")
+# ==================== FASTAPI APP ====================
+app = FastAPI(title="PharmaSaaS")
 
-SECRET_KEY = os.getenv("SESSION_SECRET", secrets.token_urlsafe(32))
-
-app.add_middleware(
-    SessionMiddleware, 
-    secret_key=SECRET_KEY,
-    max_age=86400,
-    same_site="lax",
-    https_only=False
-)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+app.add_middleware(SessionMiddleware, secret_key=secrets.token_urlsafe(32), max_age=86400)
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
-templates = Jinja2Templates(directory="templates")
 
-# FIX: Clear template cache to prevent the unhashable dict error
-templates.env.cache = {}
+# FIX: Create templates with a custom environment to avoid cache issues
+from jinja2 import Environment, FileSystemLoader, select_autoescape
+env = Environment(
+    loader=FileSystemLoader("templates"),
+    autoescape=select_autoescape(["html", "xml"]),
+    cache_size=0  # Disable template caching completely
+)
+templates = Jinja2Templates(directory="templates", env=env)
 
 cohere_service = CohereService()
 tuma_service = TumaMpesaService()
 
-# ==================== AUTHENTICATION HELPERS ====================
 def get_current_user(request: Request, db: Session = Depends(get_db)):
     user_id = request.session.get("user_id")
     if not user_id:
         return None
-    try:
-        user = db.query(models.User).filter(
-            models.User.id == user_id,
-            models.User.is_active == True
-        ).first()
-        return user
-    except Exception as e:
-        print(f"Error getting current user: {e}")
-        return None
+    return db.query(models.User).filter(models.User.id == user_id).first()
 
 def require_auth(request: Request, db: Session = Depends(get_db)):
     user = get_current_user(request, db)
@@ -628,11 +463,7 @@ async def get_inventory(
             "price": float(drug.price),
             "stock": int(total_stock),
             "reorder_level": drug.reorder_level,
-            "barcode": drug.barcode,
-            "description": drug.description,
-            "usage_instructions": drug.usage_instructions,
-            "side_effects": drug.side_effects,
-            "contraindications": drug.contraindications
+            "barcode": drug.barcode
         })
     
     return {
@@ -694,74 +525,6 @@ async def add_inventory(
     except Exception as e:
         db.rollback()
         print(f"Error adding inventory: {e}")
-        raise HTTPException(status_code=400, detail=str(e))
-
-@app.put("/api/inventory/{drug_id}")
-async def update_inventory(
-    drug_id: str,
-    request: Request,
-    user: models.User = Depends(require_auth),
-    db: Session = Depends(get_db)
-):
-    data = await request.json()
-    org_id = request.session.get("org_id")
-    
-    drug = db.query(models.Drug).filter(
-        models.Drug.id == drug_id,
-        models.Drug.organization_id == org_id
-    ).first()
-    
-    if not drug:
-        raise HTTPException(status_code=404, detail="Product not found")
-    
-    try:
-        for key, value in data.items():
-            if hasattr(drug, key) and key not in ["id", "organization_id", "created_at"]:
-                if key == "form":
-                    setattr(drug, key, models.DrugFormEnum(value))
-                elif key == "strength_unit":
-                    setattr(drug, key, models.StrengthUnitEnum(value))
-                else:
-                    setattr(drug, key, value)
-        
-        db.commit()
-        return {"success": True}
-        
-    except Exception as e:
-        db.rollback()
-        print(f"Error updating inventory: {e}")
-        raise HTTPException(status_code=400, detail=str(e))
-
-@app.delete("/api/inventory/{drug_id}")
-async def delete_inventory(
-    drug_id: str,
-    request: Request,
-    user: models.User = Depends(require_role("admin")),
-    db: Session = Depends(get_db)
-):
-    org_id = request.session.get("org_id")
-    
-    drug = db.query(models.Drug).filter(
-        models.Drug.id == drug_id,
-        models.Drug.organization_id == org_id
-    ).first()
-    
-    if not drug:
-        raise HTTPException(status_code=404, detail="Product not found")
-    
-    has_sales = db.query(models.SalesLineItem).filter(models.SalesLineItem.drug_id == drug_id).first()
-    if has_sales:
-        raise HTTPException(status_code=400, detail="Cannot delete product with existing sales")
-    
-    try:
-        db.query(models.InventoryBatch).filter(models.InventoryBatch.drug_id == drug_id).delete()
-        db.delete(drug)
-        db.commit()
-        return {"success": True}
-        
-    except Exception as e:
-        db.rollback()
-        print(f"Error deleting inventory: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
 # ==================== POINT OF SALE ====================
@@ -908,41 +671,6 @@ async def create_sale(
         print(f"Error creating sale: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
-@app.get("/api/sales")
-async def get_sales(
-    request: Request,
-    user: models.User = Depends(require_auth),
-    db: Session = Depends(get_db),
-    page: int = 1,
-    limit: int = 20
-):
-    org_id = request.session.get("org_id")
-    offset = (page - 1) * limit
-    
-    query = db.query(models.SalesOrder).filter(models.SalesOrder.organization_id == org_id)
-    total = query.count()
-    sales = query.order_by(models.SalesOrder.created_at.desc()).offset(offset).limit(limit).all()
-    
-    result = []
-    for sale in sales:
-        result.append({
-            "id": sale.id,
-            "sale_number": sale.sale_number,
-            "date": sale.created_at.isoformat(),
-            "customer_name": sale.customer.full_name if sale.customer else "Walk-in Customer",
-            "total": float(sale.total),
-            "payment_method": sale.payment_method.value,
-            "status": sale.status.value if sale.status else "completed"
-        })
-    
-    return {
-        "items": result,
-        "total": total,
-        "page": page,
-        "limit": limit,
-        "pages": (total + limit - 1) // limit
-    }
-
 # ==================== CUSTOMER MANAGEMENT ====================
 @app.get("/customers", response_class=HTMLResponse)
 async def customers_page(request: Request, user: models.User = Depends(require_auth)):
@@ -1026,37 +754,6 @@ async def add_customer(
         db.add(customer)
         db.commit()
         return {"success": True, "id": customer.id}
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=400, detail=str(e))
-
-@app.put("/api/customers/{customer_id}")
-async def update_customer(
-    customer_id: str,
-    request: Request,
-    user: models.User = Depends(require_auth),
-    db: Session = Depends(get_db)
-):
-    data = await request.json()
-    org_id = request.session.get("org_id")
-    
-    customer = db.query(models.Customer).filter(
-        models.Customer.id == customer_id,
-        models.Customer.organization_id == org_id
-    ).first()
-    
-    if not customer:
-        raise HTTPException(status_code=404, detail="Customer not found")
-    
-    try:
-        for key, value in data.items():
-            if hasattr(customer, key) and key not in ["id", "organization_id", "created_at"]:
-                if key == "date_of_birth" and value:
-                    setattr(customer, key, datetime.strptime(value, "%Y-%m-%d").date())
-                else:
-                    setattr(customer, key, value)
-        db.commit()
-        return {"success": True}
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=400, detail=str(e))
@@ -1155,69 +852,6 @@ async def add_staff(
         db.rollback()
         raise HTTPException(status_code=400, detail=str(e))
 
-@app.put("/api/staff/{staff_id}")
-async def update_staff(
-    staff_id: str,
-    request: Request,
-    user: models.User = Depends(require_role("admin")),
-    db: Session = Depends(get_db)
-):
-    data = await request.json()
-    org_id = request.session.get("org_id")
-    
-    staff = db.query(models.User).filter(
-        models.User.id == staff_id,
-        models.User.organization_id == org_id
-    ).first()
-    
-    if not staff:
-        raise HTTPException(status_code=404, detail="Staff member not found")
-    
-    try:
-        for key, value in data.items():
-            if hasattr(staff, key) and key not in ["id", "organization_id", "created_at", "password_hash"]:
-                if key == "role":
-                    setattr(staff, key, models.UserRoleEnum(value))
-                else:
-                    setattr(staff, key, value)
-        
-        if data.get("password"):
-            staff.password_hash = hash_password(data["password"])
-        
-        db.commit()
-        return {"success": True}
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=400, detail=str(e))
-
-@app.delete("/api/staff/{staff_id}")
-async def delete_staff(
-    staff_id: str,
-    request: Request,
-    user: models.User = Depends(require_role("admin")),
-    db: Session = Depends(get_db)
-):
-    org_id = request.session.get("org_id")
-    
-    if staff_id == user.id:
-        raise HTTPException(status_code=400, detail="Cannot delete your own account")
-    
-    staff = db.query(models.User).filter(
-        models.User.id == staff_id,
-        models.User.organization_id == org_id
-    ).first()
-    
-    if not staff:
-        raise HTTPException(status_code=404, detail="Staff member not found")
-    
-    try:
-        db.delete(staff)
-        db.commit()
-        return {"success": True}
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=400, detail=str(e))
-
 # ==================== AI CHAT ====================
 @app.get("/ai-chat", response_class=HTMLResponse)
 async def ai_chat_page(request: Request, user: models.User = Depends(require_auth)):
@@ -1268,50 +902,7 @@ async def ai_chat(
     
     return {"sessionId": session_id, "response": response}
 
-@app.get("/api/ai/sessions")
-async def get_ai_sessions(
-    request: Request,
-    user: models.User = Depends(require_auth),
-    db: Session = Depends(get_db)
-):
-    sessions = db.query(models.AIChatSession).filter(
-        models.AIChatSession.user_id == user.id
-    ).order_by(models.AIChatSession.updated_at.desc()).all()
-    
-    return [{
-        "id": s.id,
-        "title": s.title,
-        "created_at": s.created_at.isoformat(),
-        "updated_at": s.updated_at.isoformat()
-    } for s in sessions]
-
-@app.get("/api/ai/sessions/{session_id}/messages")
-async def get_ai_messages(
-    session_id: str,
-    request: Request,
-    user: models.User = Depends(require_auth),
-    db: Session = Depends(get_db)
-):
-    session = db.query(models.AIChatSession).filter(
-        models.AIChatSession.id == session_id,
-        models.AIChatSession.user_id == user.id
-    ).first()
-    
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
-    
-    messages = db.query(models.AIChatMessage).filter(
-        models.AIChatMessage.session_id == session_id
-    ).order_by(models.AIChatMessage.created_at).all()
-    
-    return [{
-        "id": m.id,
-        "role": m.role,
-        "content": m.content,
-        "created_at": m.created_at.isoformat()
-    } for m in messages]
-
-# ==================== TUMA MPESA PAYMENT ENDPOINTS ====================
+# ==================== MPESA PAYMENTS ====================
 @app.post("/api/payment/mpesa/initiate")
 async def initiate_mpesa_payment(
     request: Request,
@@ -1372,65 +963,24 @@ async def check_payment_status(
     request: Request,
     user: models.User = Depends(require_auth)
 ):
-    result = await tuma_service.check_payment_status(payment_id)
-    
-    if result["success"]:
-        db = next(get_db())
-        payment = db.query(models.Payment).filter(
-            models.Payment.transaction_id == payment_id
-        ).first()
-        
-        if payment:
-            payment.status = result["status"]
-            if result["status"] == "completed" and not payment.completed_at:
-                payment.completed_at = datetime.now()
-                sale = db.query(models.SalesOrder).filter(
-                    models.SalesOrder.id == payment.sale_id
-                ).first()
-                if sale:
-                    sale.amount_paid += payment.amount
-                    sale.balance = sale.total - sale.amount_paid
-            db.commit()
-        
-        db.close()
-        return result
-    else:
-        raise HTTPException(status_code=400, detail=result.get("error", "Failed to check status"))
+    return await tuma_service.check_payment_status(payment_id)
 
 @app.post("/api/payment/callback")
 async def payment_callback(request: Request):
-    try:
-        data = await request.json()
-        payment_id = data.get("payment_id")
-        status = data.get("status")
-        
-        if payment_id and status:
-            db = next(get_db())
-            payment = db.query(models.Payment).filter(
-                models.Payment.transaction_id == payment_id
-            ).first()
-            
-            if payment:
-                payment.status = status
-                payment.completed_at = datetime.now()
-                
-                if status == "completed":
-                    sale = db.query(models.SalesOrder).filter(
-                        models.SalesOrder.id == payment.sale_id
-                    ).first()
-                    if sale:
-                        sale.amount_paid += payment.amount
-                        sale.balance = sale.total - sale.amount_paid
-                
-                db.commit()
-            
-            db.close()
-        
-        return {"status": "received"}
-        
-    except Exception as e:
-        print(f"Payment callback error: {e}")
-        return {"status": "error", "message": str(e)}
+    data = await request.json()
+    db = next(get_db())
+    payment = db.query(models.Payment).filter(models.Payment.transaction_id == data.get("payment_id")).first()
+    if payment:
+        payment.status = data.get("status")
+        payment.completed_at = datetime.now()
+        if data.get("status") == "completed":
+            sale = db.query(models.SalesOrder).filter(models.SalesOrder.id == payment.sale_id).first()
+            if sale:
+                sale.amount_paid += payment.amount
+                sale.balance = sale.total - sale.amount_paid
+        db.commit()
+    db.close()
+    return {"status": "received"}
 
 # ==================== REPORTS ====================
 @app.get("/api/reports/sales")
@@ -1520,41 +1070,12 @@ async def get_categories(request: Request, user: models.User = Depends(require_a
     ).all()
     return [{"id": c.id, "name": c.name, "description": c.description} for c in categories]
 
-@app.post("/api/categories")
-async def add_category(request: Request, user: models.User = Depends(require_role("admin")), db: Session = Depends(get_db)):
-    data = await request.json()
-    category = models.Category(
-        id=str(uuid.uuid4()),
-        organization_id=request.session.get("org_id"),
-        name=data["name"],
-        description=data.get("description", "")
-    )
-    db.add(category)
-    db.commit()
-    return {"success": True, "id": category.id}
-
 @app.get("/api/suppliers")
 async def get_suppliers(request: Request, user: models.User = Depends(require_auth), db: Session = Depends(get_db)):
     suppliers = db.query(models.Supplier).filter(
         models.Supplier.organization_id == request.session.get("org_id")
     ).all()
     return [{"id": s.id, "name": s.name, "contact_person": s.contact_person, "email": s.email, "phone": s.phone} for s in suppliers]
-
-@app.post("/api/suppliers")
-async def add_supplier(request: Request, user: models.User = Depends(require_role("admin")), db: Session = Depends(get_db)):
-    data = await request.json()
-    supplier = models.Supplier(
-        id=str(uuid.uuid4()),
-        organization_id=request.session.get("org_id"),
-        name=data["name"],
-        contact_person=data.get("contact_person", ""),
-        email=data.get("email", ""),
-        phone=data.get("phone", ""),
-        address=data.get("address", "")
-    )
-    db.add(supplier)
-    db.commit()
-    return {"success": True, "id": supplier.id}
 
 # ==================== ERROR HANDLER ====================
 @app.exception_handler(HTTPException)
