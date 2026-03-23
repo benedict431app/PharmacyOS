@@ -1,6 +1,7 @@
 import bcrypt
 import types
 
+# BCrypt workaround
 try:
     bcrypt.__about__
 except AttributeError:
@@ -217,8 +218,6 @@ app.add_middleware(SessionMiddleware, secret_key=secrets.token_urlsafe(32), max_
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
-
-# Use simple template loading
 templates = Jinja2Templates(directory="templates")
 
 cohere_service = CohereService()
