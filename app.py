@@ -175,7 +175,6 @@ def create_demo_data(db: Session):
     db.add(customer)
     db.flush()
     
-    # Create demo patient medication
     demo_medication = models.PatientMedication(
         id=str(uuid.uuid4()),
         organization_id=org.id,
@@ -256,198 +255,28 @@ def create_reminder(db: Session, medication, reminder_type, message):
 # ==================== LANDING PAGE ====================
 LANDING_HTML = """<!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PharmaSaaS - Complete Pharmacy Management System</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <style>
-        .gradient-bg { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
-        .card-hover { transition: transform 0.3s ease, box-shadow 0.3s ease; }
-        .card-hover:hover { transform: translateY(-5px); box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1); }
-        .pricing-card { transition: transform 0.3s ease; }
-        .pricing-card:hover { transform: translateY(-10px); }
-    </style>
-</head>
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>PharmaSaaS - Pharmacy Management System</title>
+<script src="https://cdn.tailwindcss.com"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+<style>.gradient-bg{background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);}.card-hover{transition:transform 0.3s;}.card-hover:hover{transform:translateY(-5px);}</style></head>
 <body class="bg-gray-50">
-    <!-- Hero Section -->
-    <div class="gradient-bg text-white overflow-hidden">
-        <div class="container mx-auto px-6 py-16">
-            <div class="flex flex-col lg:flex-row items-center justify-between">
-                <div class="lg:w-1/2 text-center lg:text-left">
-                    <div class="flex justify-center lg:justify-start mb-4"><i class="fas fa-hospital-user text-5xl"></i></div>
-                    <h1 class="text-4xl md:text-5xl font-bold mb-4">PharmaSaaS</h1>
-                    <p class="text-xl mb-6">Complete Pharmacy Management System for Modern Pharmacies</p>
-                    <div class="flex gap-4 justify-center lg:justify-start flex-wrap">
-                        <a href="/register" class="bg-white text-purple-600 px-8 py-3 rounded-lg font-semibold hover:bg-gray-100 transition"><i class="fas fa-rocket mr-2"></i> Register as Pharmacy Owner</a>
-                        <a href="/register-staff" class="border-2 border-white text-white px-8 py-3 rounded-lg font-semibold hover:bg-white hover:text-purple-600 transition"><i class="fas fa-user-plus mr-2"></i> Apply as Staff</a>
-                        <a href="/login" class="border-2 border-white text-white px-8 py-3 rounded-lg font-semibold hover:bg-white hover:text-purple-600 transition"><i class="fas fa-sign-in-alt mr-2"></i> Login</a>
-                    </div>
-                    <div class="mt-8 flex gap-6 justify-center lg:justify-start">
-                        <div><div class="text-2xl font-bold">500+</div><div class="text-sm">Pharmacies</div></div>
-                        <div><div class="text-2xl font-bold">10k+</div><div class="text-sm">Daily Transactions</div></div>
-                        <div><div class="text-2xl font-bold">24/7</div><div class="text-sm">Support</div></div>
-                    </div>
-                </div>
-                <div class="lg:w-1/2 mt-12 lg:mt-0">
-                    <div class="bg-white rounded-2xl shadow-2xl p-6">
-                        <div class="flex items-center justify-between mb-4">
-                            <div class="flex space-x-2"><div class="w-3 h-3 bg-red-500 rounded-full"></div><div class="w-3 h-3 bg-yellow-500 rounded-full"></div><div class="w-3 h-3 bg-green-500 rounded-full"></div></div>
-                            <i class="fas fa-qrcode text-gray-400"></i>
-                        </div>
-                        <div class="bg-gray-100 rounded-lg p-4 mb-4">
-                            <div class="flex items-center justify-between mb-2"><span class="font-mono text-sm">Scan Barcode:</span><i class="fas fa-camera text-purple-600"></i></div>
-                            <div class="bg-white rounded p-2 font-mono text-sm">123456789012</div>
-                        </div>
-                        <div class="space-y-2">
-                            <div class="flex justify-between"><span>Paracetamol 500mg</span><span class="font-bold">Ksh 50.00</span></div>
-                            <div class="flex justify-between"><span>Amoxicillin 500mg</span><span class="font-bold">Ksh 150.00</span></div>
-                            <div class="border-t pt-2"><div class="flex justify-between font-bold"><span>Total:</span><span class="text-purple-600">Ksh 200.00</span></div></div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
+<div class="gradient-bg text-white"><div class="container mx-auto px-6 py-16 text-center"><i class="fas fa-hospital-user text-5xl mb-4"></i><h1 class="text-4xl md:text-5xl font-bold mb-4">PharmaSaaS</h1><p class="text-xl mb-8">Complete Pharmacy Management System for Modern Pharmacies</p><div class="flex gap-4 justify-center flex-wrap"><a href="/register" class="bg-white text-purple-600 px-8 py-3 rounded-lg font-semibold hover:bg-gray-100 transition"><i class="fas fa-rocket mr-2"></i> Register as Pharmacy Owner</a><a href="/register-staff" class="border-2 border-white text-white px-8 py-3 rounded-lg font-semibold hover:bg-white hover:text-purple-600 transition"><i class="fas fa-user-plus mr-2"></i> Apply as Staff</a><a href="/login" class="border-2 border-white text-white px-8 py-3 rounded-lg font-semibold hover:bg-white hover:text-purple-600 transition"><i class="fas fa-sign-in-alt mr-2"></i> Login</a></div><div class="mt-8 flex gap-6 justify-center"><div><div class="text-2xl font-bold">500+</div><div class="text-sm">Pharmacies</div></div><div><div class="text-2xl font-bold">10k+</div><div class="text-sm">Daily Transactions</div></div><div><div class="text-2xl font-bold">24/7</div><div class="text-sm">Support</div></div></div></div></div>
+<div class="container mx-auto px-6 py-20"><div class="text-center mb-12"><h2 class="text-3xl md:text-4xl font-bold mb-4">Powerful Features</h2><p class="text-xl text-gray-600">Everything you need to run your pharmacy</p></div><div class="grid md:grid-cols-2 lg:grid-cols-3 gap-8"><div class="bg-white rounded-xl shadow-lg p-6 card-hover"><i class="fas fa-qrcode text-3xl text-purple-600 mb-3"></i><h3 class="text-xl font-semibold mb-2">Barcode Scanning</h3><p class="text-gray-600">Scan product barcodes instantly</p></div><div class="bg-white rounded-xl shadow-lg p-6 card-hover"><i class="fas fa-users text-3xl text-purple-600 mb-3"></i><h3 class="text-xl font-semibold mb-2">Staff Management</h3><p class="text-gray-600">Add staff and approve applications</p></div><div class="bg-white rounded-xl shadow-lg p-6 card-hover"><i class="fas fa-credit-card text-3xl text-purple-600 mb-3"></i><h3 class="text-xl font-semibold mb-2">Credit Management</h3><p class="text-gray-600">Manage client credit accounts</p></div><div class="bg-white rounded-xl shadow-lg p-6 card-hover"><i class="fas fa-robot text-3xl text-purple-600 mb-3"></i><h3 class="text-xl font-semibold mb-2">AI Assistant</h3><p class="text-gray-600">Get drug information instantly</p></div><div class="bg-white rounded-xl shadow-lg p-6 card-hover"><i class="fas fa-chat text-3xl text-purple-600 mb-3"></i><h3 class="text-xl font-semibold mb-2">Patient Chat</h3><p class="text-gray-600">Communicate with patients</p></div><div class="bg-white rounded-xl shadow-lg p-6 card-hover"><i class="fas fa-shopping-cart text-3xl text-purple-600 mb-3"></i><h3 class="text-xl font-semibold mb-2">Point of Sale</h3><p class="text-gray-600">Fast POS with M-Pesa</p></div></div></div>
+<div class="gradient-bg text-white py-16"><div class="container mx-auto px-6 text-center"><h2 class="text-3xl md:text-4xl font-bold mb-4">Ready to transform your pharmacy?</h2><div class="flex gap-4 justify-center flex-wrap"><a href="/register" class="bg-white text-purple-600 px-8 py-3 rounded-lg font-semibold hover:bg-gray-100 transition">Register as Owner</a><a href="/register-staff" class="border-2 border-white text-white px-8 py-3 rounded-lg font-semibold hover:bg-white hover:text-purple-600 transition">Apply as Staff</a></div></div></div>
+<footer class="bg-gray-900 text-white py-8 text-center"><p>&copy; 2025 PharmaSaaS. All rights reserved.</p></footer>
+</body></html>"""
 
-    <!-- Features -->
-    <div class="container mx-auto px-6 py-20">
-        <div class="text-center mb-12"><h2 class="text-3xl md:text-4xl font-bold mb-4">Powerful Features</h2><p class="text-xl text-gray-600">Everything you need to run your pharmacy</p></div>
-        <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-            <div class="bg-white rounded-xl shadow-lg p-6 card-hover"><i class="fas fa-qrcode text-3xl text-purple-600 mb-3"></i><h3 class="text-xl font-semibold mb-2">Barcode Scanning</h3><p class="text-gray-600">Scan product barcodes for instant inventory management.</p></div>
-            <div class="bg-white rounded-xl shadow-lg p-6 card-hover"><i class="fas fa-users text-3xl text-purple-600 mb-3"></i><h3 class="text-xl font-semibold mb-2">Staff Management</h3><p class="text-gray-600">Add staff members and approve their access to your pharmacy.</p></div>
-            <div class="bg-white rounded-xl shadow-lg p-6 card-hover"><i class="fas fa-credit-card text-3xl text-purple-600 mb-3"></i><h3 class="text-xl font-semibold mb-2">Credit Management</h3><p class="text-gray-600">Manage client credit accounts and track payments.</p></div>
-            <div class="bg-white rounded-xl shadow-lg p-6 card-hover"><i class="fas fa-robot text-3xl text-purple-600 mb-3"></i><h3 class="text-xl font-semibold mb-2">AI Assistant</h3><p class="text-gray-600">Get drug information and dosage queries instantly.</p></div>
-            <div class="bg-white rounded-xl shadow-lg p-6 card-hover"><i class="fas fa-chat text-3xl text-purple-600 mb-3"></i><h3 class="text-xl font-semibold mb-2">Patient Chat</h3><p class="text-gray-600">Direct communication with patients on regular medications.</p></div>
-            <div class="bg-white rounded-xl shadow-lg p-6 card-hover"><i class="fas fa-shopping-cart text-3xl text-purple-600 mb-3"></i><h3 class="text-xl font-semibold mb-2">Point of Sale</h3><p class="text-gray-600">Fast POS with barcode scanning and M-Pesa.</p></div>
-        </div>
-    </div>
-
-    <!-- CTA -->
-    <div class="gradient-bg text-white py-16">
-        <div class="container mx-auto px-6 text-center">
-            <h2 class="text-3xl md:text-4xl font-bold mb-4">Ready to transform your pharmacy?</h2>
-            <p class="text-xl mb-8">Join thousands of pharmacies using PharmaSaaS</p>
-            <div class="flex gap-4 justify-center flex-wrap">
-                <a href="/register" class="bg-white text-purple-600 px-8 py-3 rounded-lg font-semibold hover:bg-gray-100 transition">Register as Pharmacy Owner</a>
-                <a href="/register-staff" class="border-2 border-white text-white px-8 py-3 rounded-lg font-semibold hover:bg-white hover:text-purple-600 transition">Apply as Staff</a>
-            </div>
-        </div>
-    </div>
-
-    <footer class="bg-gray-900 text-white py-8 text-center"><p>&copy; 2025 PharmaSaaS. All rights reserved.</p></footer>
-</body>
-</html>"""
-
-# ==================== REGISTER PAGE (Pharmacy Owner) ====================
+# ==================== REGISTER PAGES ====================
 REGISTER_HTML = """<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Register as Pharmacy Owner - PharmaSaaS</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-</head>
-<body class="bg-gradient-to-r from-purple-600 to-indigo-600 min-h-screen flex items-center justify-center p-4">
-    <div class="bg-white rounded-xl shadow-2xl p-8 w-full max-w-md">
-        <div class="text-center mb-6"><i class="fas fa-hospital-user text-4xl text-purple-600"></i><h1 class="text-2xl font-bold mt-2">Register Your Pharmacy</h1><p class="text-gray-600">Create your pharmacy account</p></div>
-        <div id="errorMsg" class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4 hidden"></div>
-        <form id="registerForm" method="POST" action="/register">
-            <div class="grid grid-cols-2 gap-3 mb-3"><input type="text" name="first_name" placeholder="First Name" required class="w-full px-3 py-2 border rounded-lg"><input type="text" name="last_name" placeholder="Last Name" required class="w-full px-3 py-2 border rounded-lg"></div>
-            <input type="text" name="pharmacy_name" placeholder="Pharmacy Name" required class="w-full px-3 py-2 border rounded-lg mb-3">
-            <input type="email" name="email" placeholder="Email" required class="w-full px-3 py-2 border rounded-lg mb-3">
-            <input type="tel" name="phone" placeholder="Phone" required class="w-full px-3 py-2 border rounded-lg mb-3">
-            <input type="password" name="password" placeholder="Password" required minlength="6" class="w-full px-3 py-2 border rounded-lg mb-3">
-            <input type="password" name="confirm_password" placeholder="Confirm Password" required class="w-full px-3 py-2 border rounded-lg mb-4">
-            <button type="submit" class="w-full bg-purple-600 text-white py-2 rounded-lg font-semibold hover:bg-purple-700 transition">Create Pharmacy Account</button>
-        </form>
-        <div class="mt-6 text-center"><p class="text-gray-600">Already have an account? <a href="/login" class="text-purple-600 font-semibold">Login</a></p><p class="text-gray-600 mt-2">Looking to work at a pharmacy? <a href="/register-staff" class="text-purple-600 font-semibold">Apply as Staff</a></p><a href="/" class="text-gray-500 text-sm mt-2 inline-block">← Back to home</a></div>
-    </div>
-    <script>
-        document.getElementById('registerForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const formData = new FormData(e.target);
-            const response = await fetch('/register', { method: 'POST', body: formData });
-            if (response.redirected) { window.location.href = response.url; }
-            else { const text = await response.text(); if(text.includes('error')) { document.getElementById('errorMsg').innerText = 'Registration failed'; document.getElementById('errorMsg').classList.remove('hidden'); } }
-        });
-    </script>
-</body>
-</html>"""
+<html><head><title>Register - PharmaSaaS</title><script src="https://cdn.tailwindcss.com"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet"></head>
+<body class="bg-gradient-to-r from-purple-600 to-indigo-600 min-h-screen flex items-center justify-center p-4"><div class="bg-white rounded-xl shadow-2xl p-8 w-full max-w-md"><div class="text-center mb-6"><i class="fas fa-hospital-user text-4xl text-purple-600"></i><h1 class="text-2xl font-bold mt-2">Register Your Pharmacy</h1></div><div id="errorMsg" class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4 hidden"></div><form id="registerForm" method="POST" action="/register"><div class="grid grid-cols-2 gap-3 mb-3"><input type="text" name="first_name" placeholder="First Name" required class="w-full px-3 py-2 border rounded-lg"><input type="text" name="last_name" placeholder="Last Name" required class="w-full px-3 py-2 border rounded-lg"></div><input type="text" name="pharmacy_name" placeholder="Pharmacy Name" required class="w-full px-3 py-2 border rounded-lg mb-3"><input type="email" name="email" placeholder="Email" required class="w-full px-3 py-2 border rounded-lg mb-3"><input type="tel" name="phone" placeholder="Phone" required class="w-full px-3 py-2 border rounded-lg mb-3"><input type="password" name="password" placeholder="Password" required minlength="6" class="w-full px-3 py-2 border rounded-lg mb-3"><input type="password" name="confirm_password" placeholder="Confirm Password" required class="w-full px-3 py-2 border rounded-lg mb-4"><button type="submit" class="w-full bg-purple-600 text-white py-2 rounded-lg font-semibold hover:bg-purple-700">Create Pharmacy Account</button></form><div class="mt-6 text-center"><p>Already have an account? <a href="/login" class="text-purple-600">Login</a></p><p><a href="/register-staff" class="text-purple-600">Apply as Staff</a></p><a href="/" class="text-gray-500 text-sm">← Back</a></div></div><script>document.getElementById('registerForm').addEventListener('submit',async(e)=>{e.preventDefault();const fd=new FormData(e.target);const r=await fetch('/register',{method:'POST',body:fd});if(r.redirected)window.location.href=r.url;else if((await r.text()).includes('error'))document.getElementById('errorMsg').innerText='Registration failed';document.getElementById('errorMsg').classList.remove('hidden');});</script></body></html>"""
 
-# ==================== STAFF REGISTER PAGE ====================
 STAFF_REGISTER_HTML = """<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Apply as Staff - PharmaSaaS</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-</head>
-<body class="bg-gradient-to-r from-purple-600 to-indigo-600 min-h-screen flex items-center justify-center p-4">
-    <div class="bg-white rounded-xl shadow-2xl p-8 w-full max-w-md">
-        <div class="text-center mb-6"><i class="fas fa-user-md text-4xl text-purple-600"></i><h1 class="text-2xl font-bold mt-2">Apply as Pharmacy Staff</h1><p class="text-gray-600">Request to join a pharmacy</p></div>
-        <div id="errorMsg" class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4 hidden"></div>
-        <form id="registerForm" method="POST" action="/register-staff">
-            <div class="grid grid-cols-2 gap-3 mb-3"><input type="text" name="first_name" placeholder="First Name" required class="w-full px-3 py-2 border rounded-lg"><input type="text" name="last_name" placeholder="Last Name" required class="w-full px-3 py-2 border rounded-lg"></div>
-            <input type="text" name="pharmacy_name" placeholder="Pharmacy Name (exact name)" required class="w-full px-3 py-2 border rounded-lg mb-3">
-            <input type="email" name="email" placeholder="Email" required class="w-full px-3 py-2 border rounded-lg mb-3">
-            <input type="tel" name="phone" placeholder="Phone" required class="w-full px-3 py-2 border rounded-lg mb-3">
-            <select name="requested_role" class="w-full px-3 py-2 border rounded-lg mb-3"><option value="pharmacist">Pharmacist</option><option value="cashier">Cashier</option></select>
-            <input type="password" name="password" placeholder="Password" required minlength="6" class="w-full px-3 py-2 border rounded-lg mb-3">
-            <input type="password" name="confirm_password" placeholder="Confirm Password" required class="w-full px-3 py-2 border rounded-lg mb-4">
-            <button type="submit" class="w-full bg-purple-600 text-white py-2 rounded-lg font-semibold hover:bg-purple-700 transition">Submit Application</button>
-        </form>
-        <div class="mt-6 text-center"><p class="text-gray-600">Already have an account? <a href="/login" class="text-purple-600 font-semibold">Login</a></p><p class="text-gray-600 mt-2">Want to start your own pharmacy? <a href="/register" class="text-purple-600 font-semibold">Register as Owner</a></p><a href="/" class="text-gray-500 text-sm mt-2 inline-block">← Back to home</a></div>
-    </div>
-    <script>
-        document.getElementById('registerForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const formData = new FormData(e.target);
-            const response = await fetch('/register-staff', { method: 'POST', body: formData });
-            if (response.redirected) { window.location.href = response.url; }
-            else { const text = await response.text(); if(text.includes('error')) { document.getElementById('errorMsg').innerText = 'Application failed'; document.getElementById('errorMsg').classList.remove('hidden'); } }
-        });
-    </script>
-</body>
-</html>"""
+<html><head><title>Apply as Staff - PharmaSaaS</title><script src="https://cdn.tailwindcss.com"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet"></head>
+<body class="bg-gradient-to-r from-purple-600 to-indigo-600 min-h-screen flex items-center justify-center p-4"><div class="bg-white rounded-xl shadow-2xl p-8 w-full max-w-md"><div class="text-center mb-6"><i class="fas fa-user-md text-4xl text-purple-600"></i><h1 class="text-2xl font-bold mt-2">Apply as Pharmacy Staff</h1></div><div id="errorMsg" class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4 hidden"></div><form id="registerForm" method="POST" action="/register-staff"><div class="grid grid-cols-2 gap-3 mb-3"><input type="text" name="first_name" placeholder="First Name" required class="w-full px-3 py-2 border rounded-lg"><input type="text" name="last_name" placeholder="Last Name" required class="w-full px-3 py-2 border rounded-lg"></div><input type="text" name="pharmacy_name" placeholder="Pharmacy Name (exact name)" required class="w-full px-3 py-2 border rounded-lg mb-3"><input type="email" name="email" placeholder="Email" required class="w-full px-3 py-2 border rounded-lg mb-3"><input type="tel" name="phone" placeholder="Phone" required class="w-full px-3 py-2 border rounded-lg mb-3"><select name="requested_role" class="w-full px-3 py-2 border rounded-lg mb-3"><option value="pharmacist">Pharmacist</option><option value="cashier">Cashier</option></select><input type="password" name="password" placeholder="Password" required minlength="6" class="w-full px-3 py-2 border rounded-lg mb-3"><input type="password" name="confirm_password" placeholder="Confirm Password" required class="w-full px-3 py-2 border rounded-lg mb-4"><button type="submit" class="w-full bg-purple-600 text-white py-2 rounded-lg font-semibold hover:bg-purple-700">Submit Application</button></form><div class="mt-6 text-center"><p>Already have an account? <a href="/login" class="text-purple-600">Login</a></p><p><a href="/register" class="text-purple-600">Register as Owner</a></p><a href="/" class="text-gray-500 text-sm">← Back</a></div></div><script>document.getElementById('registerForm').addEventListener('submit',async(e)=>{e.preventDefault();const fd=new FormData(e.target);const r=await fetch('/register-staff',{method:'POST',body:fd});if(r.redirected)window.location.href=r.url;else if((await r.text()).includes('error'))document.getElementById('errorMsg').innerText='Application failed';document.getElementById('errorMsg').classList.remove('hidden');});</script></body></html>"""
 
-# ==================== LOGIN PAGE ====================
 LOGIN_HTML = """<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login - PharmaSaaS</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-</head>
-<body class="bg-gradient-to-r from-purple-600 to-indigo-600 min-h-screen flex items-center justify-center p-4">
-    <div class="bg-white rounded-xl shadow-2xl p-8 w-full max-w-md">
-        <div class="text-center mb-8"><i class="fas fa-hospital-user text-4xl text-purple-600"></i><h1 class="text-2xl font-bold mt-2">PharmaSaaS</h1><p class="text-gray-600">Login to your pharmacy</p></div>
-        <div id="errorMsg" class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4 hidden"></div>
-        <form id="loginForm" method="POST" action="/login">
-            <div class="mb-4"><label class="block text-gray-700 font-semibold mb-2">Email</label><input type="email" name="email" required class="w-full px-4 py-2 border rounded-lg"></div>
-            <div class="mb-6"><label class="block text-gray-700 font-semibold mb-2">Password</label><input type="password" name="password" required class="w-full px-4 py-2 border rounded-lg"></div>
-            <button type="submit" class="w-full bg-purple-600 text-white py-2 rounded-lg font-semibold hover:bg-purple-700 transition">Login</button>
-        </form>
-        <div class="mt-6 p-4 bg-gray-50 rounded-lg"><p class="font-semibold text-gray-700">Demo Credentials:</p><p class="text-sm text-gray-600">Admin: admin@demo.com / admin123</p><p class="text-sm text-gray-600">Pharmacist: pharmacist@demo.com / pharmacist123</p></div>
-        <div class="mt-6 text-center"><p class="text-gray-600">Don't have an account? <a href="/register" class="text-purple-600 font-semibold">Register as Owner</a></p><p class="text-gray-600 mt-2"><a href="/register-staff" class="text-purple-600 font-semibold">Apply as Staff</a></p><a href="/" class="text-gray-500 text-sm mt-2 inline-block">← Back to home</a></div>
-    </div>
-    <script>
-        document.getElementById('loginForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const formData = new FormData(e.target);
-            const response = await fetch('/login', { method: 'POST', body: formData });
-            if (response.redirected) { window.location.href = response.url; }
-            else { const text = await response.text(); if(text.includes('error')) { document.getElementById('errorMsg').innerText = 'Invalid credentials'; document.getElementById('errorMsg').classList.remove('hidden'); } }
-        });
-    </script>
-</body>
-</html>"""
+<html><head><title>Login - PharmaSaaS</title><script src="https://cdn.tailwindcss.com"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet"></head>
+<body class="bg-gradient-to-r from-purple-600 to-indigo-600 min-h-screen flex items-center justify-center p-4"><div class="bg-white rounded-xl shadow-2xl p-8 w-full max-w-md"><div class="text-center mb-8"><i class="fas fa-hospital-user text-4xl text-purple-600"></i><h1 class="text-2xl font-bold mt-2">PharmaSaaS</h1></div><div id="errorMsg" class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4 hidden"></div><form id="loginForm" method="POST" action="/login"><input type="email" name="email" placeholder="Email" required class="w-full px-4 py-2 border rounded-lg mb-4"><input type="password" name="password" placeholder="Password" required class="w-full px-4 py-2 border rounded-lg mb-6"><button type="submit" class="w-full bg-purple-600 text-white py-2 rounded-lg font-semibold hover:bg-purple-700">Login</button></form><div class="mt-6 p-4 bg-gray-50 rounded-lg"><p class="font-semibold">Demo Credentials:</p><p>Admin: admin@demo.com / admin123</p><p>Pharmacist: pharmacist@demo.com / pharmacist123</p></div><div class="mt-6 text-center"><p><a href="/register" class="text-purple-600">Register as Owner</a> | <a href="/register-staff" class="text-purple-600">Apply as Staff</a></p><a href="/" class="text-gray-500 text-sm">← Back</a></div></div><script>document.getElementById('loginForm').addEventListener('submit',async(e)=>{e.preventDefault();const fd=new FormData(e.target);const r=await fetch('/login',{method:'POST',body:fd});if(r.redirected)window.location.href=r.url;else if((await r.text()).includes('error'))document.getElementById('errorMsg').innerText='Invalid credentials';document.getElementById('errorMsg').classList.remove('hidden');});</script></body></html>"""
 
 @app.get("/", response_class=HTMLResponse)
 async def landing_page(request: Request):
@@ -466,6 +295,12 @@ async def register_staff_page(request: Request):
     if request.session.get("user_id"):
         return RedirectResponse(url="/dashboard", status_code=302)
     return HTMLResponse(content=STAFF_REGISTER_HTML)
+
+@app.get("/login", response_class=HTMLResponse)
+async def login_page(request: Request):
+    if request.session.get("user_id"):
+        return RedirectResponse(url="/dashboard", status_code=302)
+    return HTMLResponse(content=LOGIN_HTML)
 
 @app.post("/register")
 async def register(request: Request, first_name: str = Form(...), last_name: str = Form(...),
@@ -515,21 +350,13 @@ async def register_staff(request: Request, first_name: str = Form(...), last_nam
     if db.query(models.User).filter(models.User.email == email).first():
         return HTMLResponse(content=STAFF_REGISTER_HTML.replace('<div id="errorMsg" class="hidden"></div>', '<div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">Email already registered</div>'))
     
-    # Create staff user with is_active = False (pending approval)
     user = models.User(id=str(uuid.uuid4()), organization_id=org.id, username=email.split('@')[0], email=email,
                        password_hash=hash_password(password), full_name=f"{first_name} {last_name}",
                        role=models.UserRoleEnum(requested_role), is_active=False, phone=phone)
     db.add(user)
     db.commit()
     
-    return HTMLResponse(content="""<!DOCTYPE html>
-<html><body style="font-family:Arial;text-align:center;padding:50px;"><h2>✓ Application Submitted!</h2><p>Your application has been sent to the pharmacy owner for approval.</p><p>You will be notified when your account is activated.</p><a href="/login" style="display:inline-block;margin-top:20px;padding:10px 20px;background:#667eea;color:white;text-decoration:none;border-radius:5px;">Return to Login</a></body></html>""")
-
-@app.get("/login", response_class=HTMLResponse)
-async def login_page(request: Request):
-    if request.session.get("user_id"):
-        return RedirectResponse(url="/dashboard", status_code=302)
-    return HTMLResponse(content=LOGIN_HTML)
+    return HTMLResponse(content="""<!DOCTYPE html><html><body style="font-family:Arial;text-align:center;padding:50px;"><h2>✓ Application Submitted!</h2><p>Your application has been sent to the pharmacy owner for approval.</p><a href="/login" style="display:inline-block;margin-top:20px;padding:10px 20px;background:#667eea;color:white;text-decoration:none;border-radius:5px;">Return to Login</a></body></html>""")
 
 @app.post("/login")
 async def login(request: Request, email: str = Form(...), password: str = Form(...), db: Session = Depends(get_db)):
@@ -580,7 +407,6 @@ async def dashboard(request: Request, db: Session = Depends(get_db)):
         )
     ).count()
     
-    # Build dashboard HTML
     low_stock_html = ""
     for item in low_stock_items:
         low_stock_html += f'<div class="bg-yellow-50 border-l-4 border-yellow-500 p-3 rounded mb-2"><div class="flex justify-between"><span class="font-medium">{item["name"]}</span><span class="text-sm">Stock: {item["stock"]} / {item["reorder"]}</span></div></div>'
@@ -598,11 +424,7 @@ async def dashboard(request: Request, db: Session = Depends(get_db)):
         pending_staff_html = f'<div class="bg-blue-50 border-l-4 border-blue-500 p-3 rounded mb-4"><div class="flex justify-between items-center"><span><strong>{pending_staff}</strong> staff application(s) pending approval</span><a href="/staff" class="bg-blue-600 text-white px-3 py-1 rounded text-sm">Review</a></div></div>'
     
     return HTMLResponse(content=f"""<!DOCTYPE html>
-<html lang="en">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Dashboard - PharmaSaaS</title>
-<script src="https://cdn.tailwindcss.com"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-<style>.gradient-bg{{background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);}}.card-hover{{transition:transform 0.2s;}}.card-hover:hover{{transform:translateY(-5px);}}</style>
-</head>
+<html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Dashboard - PharmaSaaS</title><script src="https://cdn.tailwindcss.com"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet"><style>.gradient-bg{{background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);}}.card-hover{{transition:transform 0.2s;}}.card-hover:hover{{transform:translateY(-5px);}}</style></head>
 <body class="bg-gray-100">
 <nav class="gradient-bg text-white shadow-lg"><div class="container mx-auto px-6 py-4"><div class="flex justify-between items-center flex-wrap gap-4"><div class="flex items-center space-x-3"><i class="fas fa-hospital-user text-2xl"></i><span class="font-bold text-xl">PharmaSaaS</span></div><div class="flex space-x-4 flex-wrap gap-2"><a href="/dashboard" class="bg-white bg-opacity-20 px-3 py-2 rounded">Dashboard</a><a href="/inventory" class="hover:bg-white hover:bg-opacity-20 px-3 py-2 rounded">Inventory</a><a href="/sales" class="hover:bg-white hover:bg-opacity-20 px-3 py-2 rounded">POS</a><a href="/customers" class="hover:bg-white hover:bg-opacity-20 px-3 py-2 rounded">Customers</a><a href="/patient-medications" class="hover:bg-white hover:bg-opacity-20 px-3 py-2 rounded relative">Patient Monitor{f'<span class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">{medication_alerts}</span>' if medication_alerts > 0 else ''}</a>{f'<a href="/staff" class="hover:bg-white hover:bg-opacity-20 px-3 py-2 rounded">Staff</a>' if user.role.value == "admin" else ''}<a href="/ai-chat" class="hover:bg-white hover:bg-opacity-20 px-3 py-2 rounded">AI Chat</a><a href="/logout" class="hover:bg-white hover:bg-opacity-20 px-3 py-2 rounded">Logout</a></div></div></div></nav>
 <div class="gradient-bg text-white py-8"><div class="container mx-auto px-6"><h1 class="text-3xl font-bold mb-2">Welcome back, {user.full_name}!</h1><p class="text-purple-100">{user.role.value.title()} • {user.organization.name}</p></div></div>
@@ -621,137 +443,62 @@ async def dashboard(request: Request, db: Session = Depends(get_db)):
 </div>
 <div class="grid grid-cols-2 md:grid-cols-4 gap-4"><a href="/sales" class="bg-purple-600 text-white rounded-xl p-4 text-center hover:bg-purple-700"><i class="fas fa-shopping-cart text-2xl mb-2 block"></i>New Sale</a><a href="/inventory" class="bg-blue-600 text-white rounded-xl p-4 text-center hover:bg-blue-700"><i class="fas fa-plus-circle text-2xl mb-2 block"></i>Add Product</a><a href="/customers" class="bg-green-600 text-white rounded-xl p-4 text-center hover:bg-green-700"><i class="fas fa-user-plus text-2xl mb-2 block"></i>Add Customer</a><a href="/patient-medications" class="bg-red-600 text-white rounded-xl p-4 text-center hover:bg-red-700"><i class="fas fa-heartbeat text-2xl mb-2 block"></i>Patient Monitor</a></div>
 </div>
-</body>
-</html>""")
+</body></html>""")
 
-# ==================== STAFF MANAGEMENT WITH APPROVAL ====================
+# ==================== OTHER PAGES (Simplified but Functional) ====================
+INVENTORY_HTML = """<!DOCTYPE html>
+<html><head><title>Inventory</title><script src="https://cdn.tailwindcss.com"></script><script>async function loadInventory(){const r=await fetch('/api/inventory');const d=await r.json();const tbody=document.getElementById('tbody');tbody.innerHTML='';d.items.forEach(i=>{tbody.innerHTML+=`<tr><td class="border p-2">${i.name}</td><td class="border p-2">Ksh ${i.price}</td><td class="border p-2">${i.stock}</td><td class="border p-2">${i.barcode||'-'}</td><td class="border p-2"><button onclick="deleteProduct('${i.id}')" class="bg-red-500 text-white px-2 py-1 rounded">Delete</button></td></tr>`});}async function deleteProduct(id){if(confirm('Delete?')){await fetch(`/api/inventory/${id}`,{method:'DELETE'});loadInventory();}}loadInventory();</script></head>
+<body class="bg-gray-100"><div class="container mx-auto px-6 py-8"><h1 class="text-2xl font-bold mb-4">Inventory</h1><div class="bg-white rounded shadow p-4"><table class="w-full"><thead><tr class="bg-gray-200"><th class="border p-2">Name</th><th class="border p-2">Price</th><th class="border p-2">Stock</th><th class="border p-2">Barcode</th><th class="border p-2">Actions</th></tr></thead><tbody id="tbody"></tbody></table></div><a href="/dashboard" class="inline-block mt-4 text-purple-600">Back</a></div></body></html>"""
+
+POS_HTML = """<!DOCTYPE html>
+<html><head><title>POS</title><script src="https://cdn.tailwindcss.com"></script><script>let cart=[];async function search(){const q=document.getElementById('search').value;if(!q)return;const r=await fetch(`/api/products/search?q=${q}`);const p=await r.json();const div=document.getElementById('results');div.innerHTML=p.map(pr=>`<div onclick="addToCart(${JSON.stringify(pr).replace(/"/g,'&quot;')})" class="bg-gray-100 p-2 m-1 rounded cursor-pointer">${pr.name} - Ksh ${pr.price}</div>`).join('');}function addToCart(p){const e=cart.find(i=>i.id===p.id);if(e)e.quantity++;else cart.push({...p,quantity:1});updateCart();}function updateCart(){const div=document.getElementById('cart');let total=0;div.innerHTML=cart.map((item,i)=>`<div class="flex justify-between p-2 border-b"><span>${item.name} x${item.quantity}</span><span>Ksh ${item.price*item.quantity}</span><button onclick="removeItem(${i})" class="text-red-500">Remove</button></div>`).join('');total=cart.reduce((s,i)=>s+i.price*i.quantity,0);document.getElementById('total').innerText=`Total: Ksh ${total.toFixed(2)}`;}function removeItem(i){cart.splice(i,1);updateCart();}async function checkout(){if(cart.length===0)return alert('Cart empty');const total=cart.reduce((s,i)=>s+i.price*i.quantity,0);const sale={lineItems:cart.map(i=>({productId:i.id,quantity:i.quantity,unitPrice:i.price,lineTotal:i.price*i.quantity})),subtotal:total,tax:0,discount:0,total:total,paymentMethod:'cash',amountPaid:total,balance:0};const r=await fetch('/api/sales',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(sale)});if(r.ok){alert('Sale completed!');cart=[];updateCart();}else alert('Error');}</script></head>
+<body class="bg-gray-100"><div class="container mx-auto px-6 py-8"><h1 class="text-2xl font-bold mb-4">Point of Sale</h1><div class="grid grid-cols-2 gap-4"><div><input type="text" id="search" placeholder="Search product..." class="w-full p-2 border rounded" oninput="search()"><div id="results" class="mt-2"></div></div><div><div id="cart" class="bg-white rounded shadow p-4 h-64 overflow-y-auto"></div><div id="total" class="mt-2 text-xl font-bold"></div><button onclick="checkout()" class="mt-2 bg-green-600 text-white px-4 py-2 rounded">Complete Sale</button></div></div><a href="/dashboard" class="inline-block mt-4 text-purple-600">Back</a></div></body></html>"""
+
+CUSTOMER_HTML = """<!DOCTYPE html>
+<html><head><title>Customers</title><script src="https://cdn.tailwindcss.com"></script><script>async function loadCustomers(){const r=await fetch('/api/customers');const d=await r.json();const tbody=document.getElementById('tbody');tbody.innerHTML='';d.items.forEach(c=>{tbody.innerHTML+=`<tr><td class="border p-2">${c.full_name}</td><td class="border p-2">${c.email||'-'}</td><td class="border p-2">${c.phone||'-'}</td><td class="border p-2">Ksh ${c.current_balance}</td><td class="border p-2"><button onclick="recordPayment('${c.id}')" class="bg-green-500 text-white px-2 py-1 rounded">Pay</button></td></tr>`});}async function recordPayment(id){const amt=prompt('Enter amount:');if(amt&&!isNaN(amt)&&amt>0){await fetch(`/api/customers/${id}/payment`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({amount:parseFloat(amt)})});loadCustomers();}}loadCustomers();</script></head>
+<body class="bg-gray-100"><div class="container mx-auto px-6 py-8"><h1 class="text-2xl font-bold mb-4">Customers</h1><div class="bg-white rounded shadow p-4"><table class="w-full"><thead><tr class="bg-gray-200"><th class="border p-2">Name</th><th class="border p-2">Email</th><th class="border p-2">Phone</th><th class="border p-2">Balance</th><th class="border p-2">Actions</th></tr></thead><tbody id="tbody"></tbody></table></div><a href="/dashboard" class="inline-block mt-4 text-purple-600">Back</a></div></body></html>"""
+
+AI_CHAT_HTML = """<!DOCTYPE html>
+<html><head><title>AI Assistant</title><script src="https://cdn.tailwindcss.com"></script><script>let sid=null;async function send(){const msg=document.getElementById('msg').value;if(!msg)return;addMsg(msg,'user');document.getElementById('msg').value='';const r=await fetch('/api/ai/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:msg,sessionId:sid})});const d=await r.json();sid=d.sessionId;addMsg(d.response,'assistant');}function addMsg(t,r){const div=document.getElementById('msgs');const m=document.createElement('div');m.className=`p-2 my-1 rounded ${r==='user'?'bg-purple-100 text-right':'bg-gray-200'}`;m.innerText=t;div.appendChild(m);div.scrollTop=div.scrollHeight;}</script></head>
+<body class="bg-gray-100"><div class="container mx-auto px-6 py-8"><h1 class="text-2xl font-bold mb-4">🤖 AI Pharmacy Assistant</h1><div id="msgs" class="bg-white rounded shadow p-4 h-96 overflow-y-auto mb-4"></div><div class="flex"><input id="msg" type="text" placeholder="Ask about medications..." class="flex-1 p-2 border rounded-l"><button onclick="send()" class="bg-purple-600 text-white px-4 py-2 rounded-r">Send</button></div><a href="/dashboard" class="inline-block mt-4 text-purple-600">Back</a></div></body></html>"""
+
+PATIENT_MED_HTML = """<!DOCTYPE html>
+<html><head><title>Patient Monitor</title><script src="https://cdn.tailwindcss.com"></script><script>async function load(){const r=await fetch('/api/patient-medications');const d=await r.json();const div=document.getElementById('list');div.innerHTML='';d.items.forEach(m=>{div.innerHTML+=`<div class="bg-white rounded shadow p-4 mb-2"><div class="font-bold">${m.patient.name} - ${m.drug.name}</div><div>${m.dosage_instructions}</div><div>Remaining: ${m.quantity_remaining} ${m.unit}</div>${m.needs_alert?'<div class="text-red-500">⚠️ Low Stock!</div>':''}</div>`;});}async function checkAlerts(){const r=await fetch('/api/check-medication-alerts',{method:'POST'});const d=await r.json();alert(`${d.alerts_created} alerts created`);load();}load();</script></head>
+<body class="bg-gray-100"><div class="container mx-auto px-6 py-8"><h1 class="text-2xl font-bold mb-4">Patient Medication Monitor</h1><button onclick="checkAlerts()" class="bg-yellow-500 text-white px-4 py-2 rounded mb-4">Check Alerts</button><div id="list"></div><a href="/dashboard" class="inline-block mt-4 text-purple-600">Back</a></div></body></html>"""
+
 STAFF_HTML = """<!DOCTYPE html>
-<html>
-<head>
-    <title>Staff Management - PharmaSaaS</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f7fa; }
-        .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; }
-        .header a { color: white; text-decoration: none; padding: 5px 10px; background: rgba(255,255,255,0.2); border-radius: 5px; }
-        .container { max-width: 1200px; margin: 20px auto; padding: 0 20px; }
-        .card { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; }
-        table { width: 100%; border-collapse: collapse; }
-        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #eee; }
-        th { background: #f8f9fa; }
-        .btn { padding: 8px 16px; border: none; border-radius: 5px; cursor: pointer; }
-        .btn-success { background: #48bb78; color: white; }
-        .btn-danger { background: #f56565; color: white; }
-        .btn-primary { background: #667eea; color: white; }
-        .status-pending { color: #f59e0b; font-weight: bold; }
-        .status-active { color: #48bb78; font-weight: bold; }
-        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; }
-        .modal-content { background: white; padding: 30px; border-radius: 10px; max-width: 500px; width: 90%; }
-        .form-group { margin-bottom: 15px; }
-        .form-group label { display: block; margin-bottom: 5px; font-weight: bold; }
-        .form-group input, .form-group select { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; }
-    </style>
-</head>
-<body>
-    <div class="header">
-        <h1>👨‍💼 Staff Management</h1>
-        <a href="/dashboard">← Back to Dashboard</a>
-    </div>
-    <div class="container">
-        <div class="card">
-            <div style="display: flex; justify-content: space-between; margin-bottom: 20px;">
-                <h2>Pending Approvals</h2>
-            </div>
-            <div id="pending-staff"></div>
-        </div>
-        <div class="card">
-            <div style="display: flex; justify-content: space-between; margin-bottom: 20px;">
-                <h2>Active Staff</h2>
-                <button class="btn btn-primary" onclick="showAddModal()">+ Add Staff</button>
-            </div>
-            <div id="active-staff"></div>
-        </div>
-    </div>
-    <div id="addModal" class="modal">
-        <div class="modal-content">
-            <h3>Add Staff Member</h3>
-            <form id="staffForm">
-                <div class="form-group"><label>Full Name *</label><input type="text" id="full_name" required></div>
-                <div class="form-group"><label>Email *</label><input type="email" id="email" required></div>
-                <div class="form-group"><label>Username *</label><input type="text" id="username" required></div>
-                <div class="form-group"><label>Phone</label><input type="tel" id="phone"></div>
-                <div class="form-group"><label>Role *</label><select id="role"><option value="pharmacist">Pharmacist</option><option value="cashier">Cashier</option></select></div>
-                <div class="form-group"><label>Password *</label><input type="password" id="password" required minlength="6"></div>
-                <div style="display: flex; gap: 10px; justify-content: flex-end;">
-                    <button type="button" onclick="closeModal()">Cancel</button>
-                    <button type="submit" style="background:#667eea; color:white; border:none; border-radius:4px; padding:8px 16px;">Save</button>
-                </div>
-            </form>
-        </div>
-    </div>
-    <script>
-        async function loadStaff() {
-            const res = await fetch('/api/staff');
-            const staff = await res.json();
-            const pendingHtml = staff.filter(s => !s.is_active).map(s => `
-                <div class="flex justify-between items-center p-3 border-b">
-                    <div><strong>${s.full_name}</strong><br><small>${s.email} - ${s.role}</small></div>
-                    <div><button onclick="approveStaff('${s.id}')" class="btn btn-success">Approve</button> <button onclick="rejectStaff('${s.id}')" class="btn btn-danger">Reject</button></div>
-                </div>
-            `).join('');
-            document.getElementById('pending-staff').innerHTML = pendingHtml || '<div class="text-center py-4 text-gray-400">No pending approvals</div>';
-            
-            const activeHtml = staff.filter(s => s.is_active).map(s => `
-                <tr><td>${s.full_name}</td><td>${s.email}</td><td>${s.role}</td><td class="status-active">Active</td><td><button onclick="deleteStaff('${s.id}')" class="btn btn-danger" style="padding:4px 8px;">Remove</button></td></tr>
-            `).join('');
-            document.getElementById('active-staff').innerHTML = `<table class="w-full"><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Actions</th></tr></thead><tbody>${activeHtml || '<tr><td colspan="5" class="text-center">No active staff</td></tr>'}</tbody></table>`;
-        }
-        
-        async function approveStaff(id) {
-            const res = await fetch(`/api/staff/${id}/approve`, { method: 'POST' });
-            if (res.ok) loadStaff();
-            else alert('Error approving staff');
-        }
-        
-        async function rejectStaff(id) {
-            if (confirm('Reject this staff application?')) {
-                const res = await fetch(`/api/staff/${id}`, { method: 'DELETE' });
-                if (res.ok) loadStaff();
-                else alert('Error rejecting staff');
-            }
-        }
-        
-        async function deleteStaff(id) {
-            if (confirm('Remove this staff member?')) {
-                const res = await fetch(`/api/staff/${id}`, { method: 'DELETE' });
-                if (res.ok) loadStaff();
-                else alert('Error removing staff');
-            }
-        }
-        
-        function showAddModal() { document.getElementById('addModal').style.display = 'flex'; }
-        function closeModal() { document.getElementById('addModal').style.display = 'none'; }
-        
-        document.getElementById('staffForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const data = {
-                full_name: document.getElementById('full_name').value,
-                email: document.getElementById('email').value,
-                username: document.getElementById('username').value,
-                phone: document.getElementById('phone').value,
-                role: document.getElementById('role').value,
-                password: document.getElementById('password').value
-            };
-            const res = await fetch('/api/staff', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
-            if (res.ok) { closeModal(); loadStaff(); document.getElementById('staffForm').reset(); }
-            else alert('Error adding staff');
-        });
-        
-        loadStaff();
-    </script>
-</body>
-</html>"""
+<html><head><title>Staff</title><script src="https://cdn.tailwindcss.com"></script><script>async function load(){const r=await fetch('/api/staff');const s=await r.json();const pending=s.filter(x=>!x.is_active);const active=s.filter(x=>x.is_active);document.getElementById('pending').innerHTML=pending.map(p=>`<div class="flex justify-between p-3 border-b"><div>${p.full_name} (${p.email}) - ${p.role}</div><div><button onclick="approve('${p.id}')" class="bg-green-500 text-white px-2 py-1 rounded mr-2">Approve</button><button onclick="reject('${p.id}')" class="bg-red-500 text-white px-2 py-1 rounded">Reject</button></div></div>`).join('')||'<div class="text-center py-4">No pending</div>';document.getElementById('active').innerHTML=active.map(a=>`<div class="flex justify-between p-3 border-b"><div>${a.full_name} (${a.email}) - ${a.role}</div><button onclick="remove('${a.id}')" class="bg-red-500 text-white px-2 py-1 rounded">Remove</button></div>`).join('')||'<div class="text-center py-4">No active staff</div>';}async function approve(id){await fetch(`/api/staff/${id}/approve`,{method:'POST'});load();}async function reject(id){if(confirm('Reject?')){await fetch(`/api/staff/${id}`,{method:'DELETE'});load();}}async function remove(id){if(confirm('Remove?')){await fetch(`/api/staff/${id}`,{method:'DELETE'});load();}}load();</script></head>
+<body class="bg-gray-100"><div class="container mx-auto px-6 py-8"><h1 class="text-2xl font-bold mb-4">Staff Management</h1><div class="bg-white rounded shadow p-4 mb-4"><h2 class="font-bold mb-2">Pending Approvals</h2><div id="pending"></div></div><div class="bg-white rounded shadow p-4"><h2 class="font-bold mb-2">Active Staff</h2><div id="active"></div></div><a href="/dashboard" class="inline-block mt-4 text-purple-600">Back</a></div></body></html>"""
+
+@app.get("/inventory", response_class=HTMLResponse)
+async def inventory_page(request: Request, db: Session = Depends(get_db)):
+    if not get_current_user(request, db):
+        return RedirectResponse(url="/login", status_code=302)
+    return HTMLResponse(content=INVENTORY_HTML)
+
+@app.get("/sales", response_class=HTMLResponse)
+async def sales_page(request: Request, db: Session = Depends(get_db)):
+    if not get_current_user(request, db):
+        return RedirectResponse(url="/login", status_code=302)
+    return HTMLResponse(content=POS_HTML)
+
+@app.get("/customers", response_class=HTMLResponse)
+async def customers_page(request: Request, db: Session = Depends(get_db)):
+    if not get_current_user(request, db):
+        return RedirectResponse(url="/login", status_code=302)
+    return HTMLResponse(content=CUSTOMER_HTML)
+
+@app.get("/ai-chat", response_class=HTMLResponse)
+async def ai_chat_page(request: Request, db: Session = Depends(get_db)):
+    if not get_current_user(request, db):
+        return RedirectResponse(url="/login", status_code=302)
+    return HTMLResponse(content=AI_CHAT_HTML)
+
+@app.get("/patient-medications", response_class=HTMLResponse)
+async def patient_medications_page(request: Request, db: Session = Depends(get_db)):
+    if not get_current_user(request, db):
+        return RedirectResponse(url="/login", status_code=302)
+    return HTMLResponse(content=PATIENT_MED_HTML)
 
 @app.get("/staff", response_class=HTMLResponse)
 async def staff_page(request: Request, db: Session = Depends(get_db)):
@@ -761,6 +508,97 @@ async def staff_page(request: Request, db: Session = Depends(get_db)):
     return HTMLResponse(content=STAFF_HTML)
 
 # ==================== API ENDPOINTS ====================
+@app.get("/api/inventory")
+async def get_inventory(request: Request, user: models.User = Depends(require_auth), db: Session = Depends(get_db), page: int = 1, limit: int = 20, search: str = ""):
+    org_id = request.session.get("org_id")
+    offset = (page - 1) * limit
+    query = db.query(models.Drug).filter(models.Drug.organization_id == org_id)
+    if search:
+        query = query.filter(or_(models.Drug.name.ilike(f"%{search}%"), models.Drug.barcode.ilike(f"%{search}%")))
+    total = query.count()
+    drugs = query.offset(offset).limit(limit).all()
+    items = []
+    for d in drugs:
+        stock = db.query(func.sum(models.InventoryBatch.quantity_on_hand)).filter(models.InventoryBatch.drug_id == d.id).scalar() or 0
+        items.append({"id": d.id, "name": d.name, "price": float(d.price), "stock": int(stock), "barcode": d.barcode})
+    return {"items": items, "total": total, "pages": (total + limit - 1) // limit}
+
+@app.delete("/api/inventory/{drug_id}")
+async def delete_inventory(drug_id: str, request: Request, user: models.User = Depends(require_role("admin")), db: Session = Depends(get_db)):
+    drug = db.query(models.Drug).filter(models.Drug.id == drug_id).first()
+    if not drug:
+        raise HTTPException(404, "Not found")
+    db.query(models.InventoryBatch).filter(models.InventoryBatch.drug_id == drug_id).delete()
+    db.delete(drug)
+    db.commit()
+    return {"success": True}
+
+@app.get("/api/products/search")
+async def search_products(request: Request, q: str, user: models.User = Depends(require_auth), db: Session = Depends(get_db)):
+    products = db.query(models.Drug).filter(or_(models.Drug.name.ilike(f"%{q}%"), models.Drug.barcode.ilike(f"%{q}%"))).limit(20).all()
+    result = []
+    for p in products:
+        stock = db.query(func.sum(models.InventoryBatch.quantity_on_hand)).filter(models.InventoryBatch.drug_id == p.id).scalar() or 0
+        result.append({"id": p.id, "name": p.name, "price": float(p.price), "stock": int(stock)})
+    return result
+
+@app.post("/api/sales")
+async def create_sale(request: Request, user: models.User = Depends(require_auth), db: Session = Depends(get_db)):
+    data = await request.json()
+    org_id = request.session.get("org_id")
+    try:
+        sale_number = f"SALE-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+        sale = models.SalesOrder(
+            id=str(uuid.uuid4()), organization_id=org_id, customer_id=data.get("customerId"),
+            sale_number=sale_number, subtotal=data["subtotal"], tax=data.get("tax", 0),
+            discount=data.get("discount", 0), total=data["total"],
+            payment_method=models.PaymentMethodEnum(data["paymentMethod"]),
+            amount_paid=data.get("amountPaid", data["total"]), balance=data.get("balance", 0),
+            created_by=user.id
+        )
+        db.add(sale)
+        db.flush()
+        for item in data["lineItems"]:
+            db.add(models.SalesLineItem(id=str(uuid.uuid4()), sales_order_id=sale.id, drug_id=item["productId"],
+                                         quantity=item["quantity"], unit_price=item["unitPrice"], line_total=item["lineTotal"]))
+            remaining = item["quantity"]
+            for batch in db.query(models.InventoryBatch).filter(models.InventoryBatch.drug_id == item["productId"], models.InventoryBatch.quantity_on_hand > 0).order_by(models.InventoryBatch.expiry_date).all():
+                if remaining <= 0: break
+                take = min(batch.quantity_on_hand, remaining)
+                batch.quantity_on_hand -= take
+                remaining -= take
+        if data["paymentMethod"] == "credit" and data.get("customerId"):
+            customer = db.query(models.Customer).filter(models.Customer.id == data["customerId"]).first()
+            if customer:
+                customer.current_balance += data.get("balance", 0)
+        db.commit()
+        return {"success": True, "sale_id": sale.id, "sale_number": sale.sale_number}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(400, detail=str(e))
+
+@app.get("/api/customers")
+async def get_customers(request: Request, user: models.User = Depends(require_auth), db: Session = Depends(get_db), page: int = 1, limit: int = 20, search: str = ""):
+    org_id = request.session.get("org_id")
+    offset = (page - 1) * limit
+    query = db.query(models.Customer).filter(models.Customer.organization_id == org_id)
+    if search:
+        query = query.filter(or_(models.Customer.first_name.ilike(f"%{search}%"), models.Customer.last_name.ilike(f"%{search}%"), models.Customer.email.ilike(f"%{search}%")))
+    total = query.count()
+    customers = query.offset(offset).limit(limit).all()
+    items = [{"id": c.id, "full_name": c.full_name, "email": c.email, "phone": c.phone, "current_balance": float(c.current_balance)} for c in customers]
+    return {"items": items, "total": total, "pages": (total + limit - 1) // limit}
+
+@app.post("/api/customers/{customer_id}/payment")
+async def add_customer_payment(customer_id: str, request: Request, user: models.User = Depends(require_auth), db: Session = Depends(get_db)):
+    data = await request.json()
+    customer = db.query(models.Customer).filter(models.Customer.id == customer_id).first()
+    if not customer:
+        raise HTTPException(404, "Not found")
+    customer.current_balance -= data.get("amount", 0)
+    db.commit()
+    return {"success": True, "new_balance": float(customer.current_balance)}
+
 @app.get("/api/staff")
 async def get_staff(request: Request, user: models.User = Depends(require_role("admin")), db: Session = Depends(get_db)):
     staff = db.query(models.User).filter(
@@ -768,18 +606,6 @@ async def get_staff(request: Request, user: models.User = Depends(require_role("
         models.User.role != models.UserRoleEnum.admin
     ).all()
     return [{"id": s.id, "full_name": s.full_name, "email": s.email, "role": s.role.value, "is_active": s.is_active} for s in staff]
-
-@app.post("/api/staff")
-async def add_staff(request: Request, user: models.User = Depends(require_role("admin")), db: Session = Depends(get_db)):
-    data = await request.json()
-    if db.query(models.User).filter(models.User.email == data["email"]).first():
-        raise HTTPException(400, "Email exists")
-    staff = models.User(id=str(uuid.uuid4()), organization_id=request.session.get("org_id"), username=data["username"],
-                        email=data["email"], password_hash=hash_password(data["password"]), full_name=data["full_name"],
-                        role=models.UserRoleEnum(data["role"]), is_active=True, phone=data.get("phone", ""))
-    db.add(staff)
-    db.commit()
-    return {"success": True, "id": staff.id}
 
 @app.post("/api/staff/{staff_id}/approve")
 async def approve_staff(staff_id: str, request: Request, user: models.User = Depends(require_role("admin")), db: Session = Depends(get_db)):
@@ -801,8 +627,102 @@ async def delete_staff(staff_id: str, request: Request, user: models.User = Depe
     db.commit()
     return {"success": True}
 
-# ==================== OTHER API ENDPOINTS ====================
-# [Include all your existing API endpoints here - inventory, POS, customers, patient medications, etc.]
+@app.post("/api/ai/chat")
+async def ai_chat(request: Request, user: models.User = Depends(require_auth), db: Session = Depends(get_db)):
+    data = await request.json()
+    message = data.get("message")
+    session_id = data.get("sessionId")
+    if not message:
+        raise HTTPException(400, "Message required")
+    if not session_id:
+        session = models.AIChatSession(id=str(uuid.uuid4()), user_id=user.id, title=message[:50])
+        db.add(session)
+        db.flush()
+        session_id = session.id
+    db.add(models.AIChatMessage(id=str(uuid.uuid4()), session_id=session_id, role="user", content=message))
+    db.flush()
+    response = await cohere_service.get_drug_information(message)
+    db.add(models.AIChatMessage(id=str(uuid.uuid4()), session_id=session_id, role="assistant", content=response))
+    db.commit()
+    return {"sessionId": session_id, "response": response}
+
+@app.get("/api/patient-medications")
+async def get_patient_medications(request: Request, user: models.User = Depends(require_auth), db: Session = Depends(get_db), page: int = 1, limit: int = 20):
+    org_id = request.session.get("org_id")
+    offset = (page - 1) * limit
+    medications = db.query(models.PatientMedication).filter(models.PatientMedication.organization_id == org_id).offset(offset).limit(limit).all()
+    result = [{
+        "id": m.id,
+        "patient": {"id": m.patient.id, "name": m.patient.full_name},
+        "drug": {"id": m.drug.id, "name": m.drug.name},
+        "dosage_instructions": m.dosage_instructions,
+        "quantity_given": m.quantity_given,
+        "quantity_remaining": m.quantity_remaining,
+        "unit": m.unit,
+        "needs_alert": m.quantity_remaining <= m.low_stock_threshold
+    } for m in medications]
+    return {"items": result, "total": len(result), "pages": 1}
+
+@app.post("/api/check-medication-alerts")
+async def check_medication_alerts(request: Request, user: models.User = Depends(require_auth), db: Session = Depends(get_db)):
+    org_id = request.session.get("org_id")
+    medications = db.query(models.PatientMedication).filter(models.PatientMedication.organization_id == org_id, models.PatientMedication.status == models.MedicationStatusEnum.active).all()
+    alerts_created = 0
+    for med in medications:
+        if med.quantity_remaining <= med.low_stock_threshold:
+            existing = db.query(models.MedicationReminder).filter(models.MedicationReminder.medication_id == med.id, models.MedicationReminder.reminder_type == models.ReminderTypeEnum.low_stock, models.MedicationReminder.sent_at >= datetime.now() - timedelta(days=3)).first()
+            if not existing:
+                create_reminder(db, med, models.ReminderTypeEnum.low_stock, f"⚠️ Low stock alert: Only {med.quantity_remaining} {med.unit} remaining.")
+                alerts_created += 1
+        if med.next_refill_date and med.next_refill_date <= date.today():
+            existing = db.query(models.MedicationReminder).filter(models.MedicationReminder.medication_id == med.id, models.MedicationReminder.reminder_type == models.ReminderTypeEnum.refill_due, models.MedicationReminder.sent_at >= datetime.now() - timedelta(days=3)).first()
+            if not existing:
+                days_overdue = (date.today() - med.next_refill_date).days
+                create_reminder(db, med, models.ReminderTypeEnum.refill_due, f"📅 Refill reminder: Medication refill is {days_overdue} days overdue.")
+                alerts_created += 1
+    return {"success": True, "alerts_created": alerts_created}
+
+# ==================== MPESA PAYMENTS ====================
+@app.post("/api/payment/mpesa/initiate")
+async def initiate_mpesa(request: Request, user: models.User = Depends(require_auth), db: Session = Depends(get_db)):
+    data = await request.json()
+    sale = db.query(models.SalesOrder).filter(models.SalesOrder.id == data["sale_id"]).first()
+    if not sale:
+        raise HTTPException(404, "Sale not found")
+    result = await tuma_service.initiate_payment(data["amount"], data["phone"], sale.sale_number)
+    if result["success"]:
+        payment = models.Payment(id=str(uuid.uuid4()), organization_id=sale.organization_id, sale_id=sale.id, amount=data["amount"],
+                                  payment_method=models.PaymentMethodEnum.mpesa, reference=result["reference"], status="pending",
+                                  transaction_id=result["payment_id"], created_by=user.id)
+        db.add(payment)
+        db.commit()
+    return result
+
+@app.get("/api/payment/status/{payment_id}")
+async def payment_status(payment_id: str, request: Request):
+    return await tuma_service.check_payment_status(payment_id)
+
+@app.post("/api/payment/callback")
+async def payment_callback(request: Request):
+    data = await request.json()
+    db = next(get_db())
+    payment = db.query(models.Payment).filter(models.Payment.transaction_id == data.get("payment_id")).first()
+    if payment:
+        payment.status = data.get("status")
+        if data.get("status") == "completed":
+            sale = db.query(models.SalesOrder).filter(models.SalesOrder.id == payment.sale_id).first()
+            if sale:
+                sale.amount_paid += payment.amount
+                sale.balance = sale.total - sale.amount_paid
+        db.commit()
+    db.close()
+    return {"status": "received"}
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    if exc.status_code == 401:
+        return RedirectResponse(url="/login", status_code=302)
+    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
 
 if __name__ == "__main__":
     import uvicorn
