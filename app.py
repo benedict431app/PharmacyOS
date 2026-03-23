@@ -15,7 +15,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 from sqlalchemy.orm import Session
-from sqlalchemy import func, or_, and_
+from sqlalchemy import func, or_
 from passlib.context import CryptContext
 from datetime import datetime, date, timedelta
 import os
@@ -835,23 +835,7 @@ async def refill_medication(medication_id: str, request: Request, user: models.U
         raise HTTPException(404, "Not found")
     
     quantity_refilled = data.get("quantity", 0)
-    old_quantity = medication.quantity_remaining
-    new_quantity = old_quantity + quantity_refilled
-    
-    refill = models.MedicationRefill(
-        id=str(uuid.uuid4()),
-        medication_id=medication_id,
-        organization_id=medication.organization_id,
-        refill_date=datetime.now().date(),
-        quantity_refilled=quantity_refilled,
-        previous_quantity=old_quantity,
-        new_quantity=new_quantity,
-        notes=data.get("notes", ""),
-        created_by=user.id
-    )
-    db.add(refill)
-    
-    medication.quantity_remaining = new_quantity
+    medication.quantity_remaining += quantity_refilled
     medication.last_refill_date = datetime.now().date()
     
     if medication.end_date:
@@ -859,9 +843,9 @@ async def refill_medication(medication_id: str, request: Request, user: models.U
     
     db.commit()
     
-    create_reminder(db, medication, "refill_due", f"Medication refilled: {quantity_refilled} {medication.unit} added. New stock: {new_quantity}")
+    create_reminder(db, medication, "refill_due", f"Medication refilled: {quantity_refilled} {medication.unit} added. New stock: {medication.quantity_remaining}")
     
-    return {"success": True, "new_quantity": new_quantity}
+    return {"success": True, "new_quantity": medication.quantity_remaining}
 
 @app.post("/api/patient-medications/{medication_id}/adjust-stock")
 async def adjust_medication_stock(medication_id: str, request: Request, user: models.User = Depends(require_auth), db: Session = Depends(get_db)):
@@ -871,10 +855,7 @@ async def adjust_medication_stock(medication_id: str, request: Request, user: mo
         raise HTTPException(404, "Not found")
     
     new_quantity = data.get("quantity", 0)
-    old_quantity = medication.quantity_remaining
     medication.quantity_remaining = new_quantity
-    medication.notes = f"{medication.notes}\n[{datetime.now().strftime('%Y-%m-%d')}] Stock adjusted from {old_quantity} to {new_quantity}. Reason: {data.get('reason', 'Manual adjustment')}"
-    
     db.commit()
     
     if new_quantity <= medication.low_stock_threshold:
@@ -929,7 +910,7 @@ async def get_medication_chat(medication_id: str, request: Request, user: models
         "id": m.id,
         "message": m.message,
         "is_from_patient": m.is_from_patient,
-        "sender_name": m.patient.full_name if m.is_from_patient else (m.user.full_name if m.user else "Pharmacy"),
+        "sender_name": m.patient.full_name if m.is_from_patient else "Pharmacy",
         "created_at": m.created_at.isoformat()
     } for m in messages]
 
@@ -980,8 +961,7 @@ async def check_medication_alerts(request: Request, user: models.User = Depends(
                 models.MedicationReminder.sent_at >= datetime.now() - timedelta(days=3)
             ).first()
             if not existing:
-                days_overdue = (date.today() - med.next_refill_date).days
-                create_reminder(db, med, "refill_due", f"📅 Refill reminder: Medication refill is {days_overdue} days overdue. Please schedule a refill.")
+                create_reminder(db, med, "refill_due", f"📅 Refill reminder: Medication refill is overdue. Please schedule a refill.")
                 alerts_created += 1
     
     return {"success": True, "alerts_created": alerts_created}
