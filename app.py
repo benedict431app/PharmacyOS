@@ -15,7 +15,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 from sqlalchemy.orm import Session
-from sqlalchemy import func, or_
+from sqlalchemy import func, or_, and_
 from passlib.context import CryptContext
 from datetime import datetime, date, timedelta
 import os
@@ -23,6 +23,7 @@ import uuid
 import cohere
 import secrets
 import httpx
+import json
 
 from database import engine, get_db, Base
 import models
@@ -218,7 +219,6 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, 
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
-# Fix template cache issue
 templates.env.cache = {}
 
 cohere_service = CohereService()
@@ -257,7 +257,7 @@ def create_reminder(db: Session, medication, reminder_type, message):
     db.commit()
     return reminder
 
-# ==================== PUBLIC PAGES ====================
+# ==================== AUTHENTICATION ROUTES ====================
 @app.get("/", response_class=HTMLResponse)
 async def landing_page(request: Request):
     if request.session.get("user_id"):
@@ -349,7 +349,7 @@ async def register_staff(request: Request, first_name: str = Form(...), last_nam
     db.add(user)
     db.commit()
     
-    return templates.TemplateResponse("register_staff.html", {"request": request, "success": "Application submitted successfully! Please wait for approval."})
+    return templates.TemplateResponse("register_staff.html", {"request": request, "success": "Application submitted! Please wait for approval."})
 
 @app.get("/logout")
 async def logout(request: Request):
@@ -397,7 +397,7 @@ async def dashboard(request: Request, user: models.User = Depends(require_auth),
         "medication_alerts": medication_alerts
     })
 
-# ==================== INVENTORY ====================
+# ==================== INVENTORY MANAGEMENT ====================
 @app.get("/inventory", response_class=HTMLResponse)
 async def inventory_page(request: Request, user: models.User = Depends(require_auth)):
     return templates.TemplateResponse("inventory.html", {"request": request, "user": user})
@@ -462,6 +462,24 @@ async def add_inventory(request: Request, user: models.User = Depends(require_au
         db.rollback()
         raise HTTPException(400, detail=str(e))
 
+@app.put("/api/inventory/{drug_id}")
+async def update_inventory(drug_id: str, request: Request, user: models.User = Depends(require_auth), db: Session = Depends(get_db)):
+    data = await request.json()
+    drug = db.query(models.Drug).filter(models.Drug.id == drug_id).first()
+    if not drug:
+        raise HTTPException(404, "Not found")
+    
+    for key, value in data.items():
+        if hasattr(drug, key) and key not in ["id", "organization_id", "created_at"]:
+            if key == "form":
+                setattr(drug, key, models.DrugFormEnum(value))
+            elif key == "strength_unit":
+                setattr(drug, key, models.StrengthUnitEnum(value))
+            else:
+                setattr(drug, key, value)
+    db.commit()
+    return {"success": True}
+
 @app.delete("/api/inventory/{drug_id}")
 async def delete_inventory(drug_id: str, request: Request, user: models.User = Depends(require_role("admin")), db: Session = Depends(get_db)):
     drug = db.query(models.Drug).filter(models.Drug.id == drug_id).first()
@@ -477,7 +495,7 @@ async def delete_inventory(drug_id: str, request: Request, user: models.User = D
     db.commit()
     return {"success": True}
 
-# ==================== POS ====================
+# ==================== POINT OF SALE ====================
 @app.get("/sales", response_class=HTMLResponse)
 async def sales_page(request: Request, user: models.User = Depends(require_auth)):
     return templates.TemplateResponse("pos.html", {"request": request, "user": user})
@@ -545,7 +563,19 @@ async def create_sale(request: Request, user: models.User = Depends(require_auth
         db.rollback()
         raise HTTPException(400, detail=str(e))
 
-# ==================== CUSTOMERS ====================
+@app.get("/api/sales")
+async def get_sales(request: Request, user: models.User = Depends(require_auth), db: Session = Depends(get_db), page: int = 1, limit: int = 20):
+    org_id = request.session.get("org_id")
+    offset = (page - 1) * limit
+    query = db.query(models.SalesOrder).filter(models.SalesOrder.organization_id == org_id)
+    total = query.count()
+    sales = query.order_by(models.SalesOrder.created_at.desc()).offset(offset).limit(limit).all()
+    result = [{"id": s.id, "sale_number": s.sale_number, "date": s.created_at.isoformat(),
+               "customer_name": s.customer.full_name if s.customer else "Walk-in Customer",
+               "total": float(s.total), "payment_method": s.payment_method.value} for s in sales]
+    return {"items": result, "total": total, "pages": (total + limit - 1) // limit}
+
+# ==================== CUSTOMER MANAGEMENT ====================
 @app.get("/customers", response_class=HTMLResponse)
 async def customers_page(request: Request, user: models.User = Depends(require_auth)):
     return templates.TemplateResponse("customers.html", {"request": request, "user": user})
@@ -569,17 +599,49 @@ async def get_customers(request: Request, user: models.User = Depends(require_au
     items = [{"id": c.id, "full_name": c.full_name, "email": c.email, "phone": c.phone, "current_balance": float(c.current_balance)} for c in customers]
     return {"items": items, "total": total, "pages": (total + limit - 1) // limit}
 
+@app.post("/api/customers")
+async def add_customer(request: Request, user: models.User = Depends(require_auth), db: Session = Depends(get_db)):
+    data = await request.json()
+    customer = models.Customer(
+        id=str(uuid.uuid4()), organization_id=request.session.get("org_id"),
+        first_name=data["first_name"], last_name=data["last_name"], email=data.get("email", ""),
+        phone=data.get("phone", ""), address=data.get("address", ""),
+        date_of_birth=datetime.strptime(data["date_of_birth"], "%Y-%m-%d").date() if data.get("date_of_birth") else None,
+        allergies=data.get("allergies", ""), medical_conditions=data.get("medical_conditions", ""),
+        allow_credit=data.get("allow_credit", False), credit_limit=data.get("credit_limit", 0), current_balance=0
+    )
+    db.add(customer)
+    db.commit()
+    return {"success": True, "id": customer.id}
+
+@app.put("/api/customers/{customer_id}")
+async def update_customer(customer_id: str, request: Request, user: models.User = Depends(require_auth), db: Session = Depends(get_db)):
+    data = await request.json()
+    customer = db.query(models.Customer).filter(models.Customer.id == customer_id).first()
+    if not customer:
+        raise HTTPException(404, "Not found")
+    
+    for key, value in data.items():
+        if hasattr(customer, key) and key not in ["id", "organization_id", "created_at"]:
+            if key == "date_of_birth" and value:
+                setattr(customer, key, datetime.strptime(value, "%Y-%m-%d").date())
+            else:
+                setattr(customer, key, value)
+    db.commit()
+    return {"success": True}
+
 @app.post("/api/customers/{customer_id}/payment")
 async def add_customer_payment(customer_id: str, request: Request, user: models.User = Depends(require_auth), db: Session = Depends(get_db)):
     data = await request.json()
     customer = db.query(models.Customer).filter(models.Customer.id == customer_id).first()
     if not customer:
         raise HTTPException(404, "Not found")
+    
     customer.current_balance -= data.get("amount", 0)
     db.commit()
     return {"success": True, "new_balance": float(customer.current_balance)}
 
-# ==================== STAFF ====================
+# ==================== STAFF MANAGEMENT ====================
 @app.get("/staff", response_class=HTMLResponse)
 async def staff_page(request: Request, user: models.User = Depends(require_role("admin"))):
     return templates.TemplateResponse("staff.html", {"request": request, "user": user})
@@ -597,12 +659,33 @@ async def add_staff(request: Request, user: models.User = Depends(require_role("
     data = await request.json()
     if db.query(models.User).filter(models.User.email == data["email"]).first():
         raise HTTPException(400, "Email exists")
+    
     staff = models.User(id=str(uuid.uuid4()), organization_id=request.session.get("org_id"), username=data["username"],
                         email=data["email"], password_hash=hash_password(data["password"]), full_name=data["full_name"],
                         role=models.UserRoleEnum(data["role"]), is_active=True, phone=data.get("phone", ""))
     db.add(staff)
     db.commit()
     return {"success": True, "id": staff.id}
+
+@app.put("/api/staff/{staff_id}")
+async def update_staff(staff_id: str, request: Request, user: models.User = Depends(require_role("admin")), db: Session = Depends(get_db)):
+    data = await request.json()
+    staff = db.query(models.User).filter(models.User.id == staff_id).first()
+    if not staff:
+        raise HTTPException(404, "Not found")
+    
+    for key, value in data.items():
+        if hasattr(staff, key) and key not in ["id", "organization_id", "created_at", "password_hash"]:
+            if key == "role":
+                setattr(staff, key, models.UserRoleEnum(value))
+            else:
+                setattr(staff, key, value)
+    
+    if data.get("password"):
+        staff.password_hash = hash_password(data["password"])
+    
+    db.commit()
+    return {"success": True}
 
 @app.post("/api/staff/{staff_id}/approve")
 async def approve_staff(staff_id: str, request: Request, user: models.User = Depends(require_role("admin")), db: Session = Depends(get_db)):
@@ -634,6 +717,7 @@ async def ai_chat(request: Request, user: models.User = Depends(require_auth), d
     data = await request.json()
     message = data.get("message")
     session_id = data.get("sessionId")
+    
     if not message:
         raise HTTPException(400, "Message required")
     
@@ -645,12 +729,27 @@ async def ai_chat(request: Request, user: models.User = Depends(require_auth), d
     
     db.add(models.AIChatMessage(id=str(uuid.uuid4()), session_id=session_id, role="user", content=message))
     db.flush()
+    
     response = await cohere_service.get_drug_information(message)
     db.add(models.AIChatMessage(id=str(uuid.uuid4()), session_id=session_id, role="assistant", content=response))
     db.commit()
+    
     return {"sessionId": session_id, "response": response}
 
-# ==================== PATIENT MEDICATIONS ====================
+@app.get("/api/ai/sessions")
+async def get_ai_sessions(request: Request, user: models.User = Depends(require_auth), db: Session = Depends(get_db)):
+    sessions = db.query(models.AIChatSession).filter(models.AIChatSession.user_id == user.id).order_by(models.AIChatSession.updated_at.desc()).all()
+    return [{"id": s.id, "title": s.title, "created_at": s.created_at.isoformat()} for s in sessions]
+
+@app.get("/api/ai/sessions/{session_id}/messages")
+async def get_ai_messages(session_id: str, request: Request, user: models.User = Depends(require_auth), db: Session = Depends(get_db)):
+    session = db.query(models.AIChatSession).filter(models.AIChatSession.id == session_id, models.AIChatSession.user_id == user.id).first()
+    if not session:
+        raise HTTPException(404, "Session not found")
+    messages = db.query(models.AIChatMessage).filter(models.AIChatMessage.session_id == session_id).order_by(models.AIChatMessage.created_at).all()
+    return [{"id": m.id, "role": m.role, "content": m.content, "created_at": m.created_at.isoformat()} for m in messages]
+
+# ==================== PATIENT MEDICATION MONITORING ====================
 @app.get("/patient-medications", response_class=HTMLResponse)
 async def patient_medications_page(request: Request, user: models.User = Depends(require_auth)):
     return templates.TemplateResponse("patient_medications.html", {"request": request, "user": user})
@@ -659,26 +758,74 @@ async def patient_medications_page(request: Request, user: models.User = Depends
 async def get_patient_medications(request: Request, user: models.User = Depends(require_auth), db: Session = Depends(get_db), page: int = 1, limit: int = 20, status: str = "active"):
     org_id = request.session.get("org_id")
     offset = (page - 1) * limit
+    
     status_enum = models.MedicationStatusEnum.active if status == "active" else (models.MedicationStatusEnum.completed if status == "completed" else models.MedicationStatusEnum.discontinued)
     
     query = db.query(models.PatientMedication).filter(
         models.PatientMedication.organization_id == org_id,
         models.PatientMedication.status == status_enum
     )
+    
     total = query.count()
     medications = query.offset(offset).limit(limit).all()
     
-    result = [{
-        "id": m.id,
-        "patient": {"id": m.patient.id, "name": m.patient.full_name},
-        "drug": {"id": m.drug.id, "name": m.drug.name},
-        "dosage_instructions": m.dosage_instructions,
-        "quantity_given": m.quantity_given,
-        "quantity_remaining": m.quantity_remaining,
-        "unit": m.unit,
-        "needs_alert": m.quantity_remaining <= m.low_stock_threshold
-    } for m in medications]
+    result = []
+    for m in medications:
+        result.append({
+            "id": m.id,
+            "patient": {"id": m.patient.id, "name": m.patient.full_name},
+            "drug": {"id": m.drug.id, "name": m.drug.name},
+            "dosage_instructions": m.dosage_instructions,
+            "quantity_given": m.quantity_given,
+            "quantity_remaining": m.quantity_remaining,
+            "unit": m.unit,
+            "needs_alert": m.quantity_remaining <= m.low_stock_threshold,
+            "status": m.status.value
+        })
+    
     return {"items": result, "total": total, "pages": (total + limit - 1) // limit}
+
+@app.post("/api/patient-medications")
+async def add_patient_medication(request: Request, user: models.User = Depends(require_auth), db: Session = Depends(get_db)):
+    data = await request.json()
+    org_id = request.session.get("org_id")
+    
+    try:
+        end_date = None
+        next_refill_date = None
+        if data.get("end_date"):
+            end_date = datetime.strptime(data["end_date"], "%Y-%m-%d").date()
+            next_refill_date = end_date - timedelta(days=data.get("reminder_days_before", 3))
+        
+        medication = models.PatientMedication(
+            id=str(uuid.uuid4()),
+            organization_id=org_id,
+            patient_id=data["patient_id"],
+            drug_id=data["drug_id"],
+            dosage_instructions=data["dosage_instructions"],
+            quantity_given=data["quantity_given"],
+            quantity_remaining=data["quantity_given"],
+            unit=data.get("unit", "tablets"),
+            start_date=datetime.strptime(data["start_date"], "%Y-%m-%d").date(),
+            end_date=end_date,
+            next_refill_date=next_refill_date,
+            last_refill_date=datetime.now().date(),
+            reminder_days_before=data.get("reminder_days_before", 3),
+            low_stock_threshold=data.get("low_stock_threshold", 10),
+            status=models.MedicationStatusEnum.active,
+            notes=data.get("notes", ""),
+            created_by=user.id
+        )
+        db.add(medication)
+        db.commit()
+        
+        if medication.quantity_remaining <= medication.low_stock_threshold:
+            create_reminder(db, medication, "low_stock", f"Low stock alert: Only {medication.quantity_remaining} {medication.unit} remaining")
+        
+        return {"success": True, "id": medication.id}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(400, detail=str(e))
 
 @app.put("/api/patient-medications/{medication_id}/refill")
 async def refill_medication(medication_id: str, request: Request, user: models.User = Depends(require_auth), db: Session = Depends(get_db)):
@@ -687,10 +834,34 @@ async def refill_medication(medication_id: str, request: Request, user: models.U
     if not medication:
         raise HTTPException(404, "Not found")
     
-    medication.quantity_remaining += data.get("quantity", 0)
+    quantity_refilled = data.get("quantity", 0)
+    old_quantity = medication.quantity_remaining
+    new_quantity = old_quantity + quantity_refilled
+    
+    refill = models.MedicationRefill(
+        id=str(uuid.uuid4()),
+        medication_id=medication_id,
+        organization_id=medication.organization_id,
+        refill_date=datetime.now().date(),
+        quantity_refilled=quantity_refilled,
+        previous_quantity=old_quantity,
+        new_quantity=new_quantity,
+        notes=data.get("notes", ""),
+        created_by=user.id
+    )
+    db.add(refill)
+    
+    medication.quantity_remaining = new_quantity
     medication.last_refill_date = datetime.now().date()
+    
+    if medication.end_date:
+        medication.next_refill_date = medication.end_date - timedelta(days=medication.reminder_days_before)
+    
     db.commit()
-    return {"success": True, "new_quantity": medication.quantity_remaining}
+    
+    create_reminder(db, medication, "refill_due", f"Medication refilled: {quantity_refilled} {medication.unit} added. New stock: {new_quantity}")
+    
+    return {"success": True, "new_quantity": new_quantity}
 
 @app.post("/api/patient-medications/{medication_id}/adjust-stock")
 async def adjust_medication_stock(medication_id: str, request: Request, user: models.User = Depends(require_auth), db: Session = Depends(get_db)):
@@ -699,14 +870,68 @@ async def adjust_medication_stock(medication_id: str, request: Request, user: mo
     if not medication:
         raise HTTPException(404, "Not found")
     
-    medication.quantity_remaining = data.get("quantity", 0)
+    new_quantity = data.get("quantity", 0)
+    old_quantity = medication.quantity_remaining
+    medication.quantity_remaining = new_quantity
+    medication.notes = f"{medication.notes}\n[{datetime.now().strftime('%Y-%m-%d')}] Stock adjusted from {old_quantity} to {new_quantity}. Reason: {data.get('reason', 'Manual adjustment')}"
+    
     db.commit()
-    return {"success": True, "new_quantity": medication.quantity_remaining}
+    
+    if new_quantity <= medication.low_stock_threshold:
+        create_reminder(db, medication, "low_stock", f"Low stock alert: Only {new_quantity} {medication.unit} remaining")
+    
+    return {"success": True, "new_quantity": new_quantity}
+
+@app.get("/api/patient-medications/alerts")
+async def get_medication_alerts(request: Request, user: models.User = Depends(require_auth), db: Session = Depends(get_db)):
+    org_id = request.session.get("org_id")
+    alerts = []
+    
+    low_stock = db.query(models.PatientMedication).filter(
+        models.PatientMedication.organization_id == org_id,
+        models.PatientMedication.status == models.MedicationStatusEnum.active,
+        models.PatientMedication.quantity_remaining <= models.PatientMedication.low_stock_threshold
+    ).all()
+    
+    for med in low_stock:
+        alerts.append({
+            "type": "low_stock",
+            "medication_id": med.id,
+            "patient": med.patient.full_name,
+            "drug": med.drug.name,
+            "message": f"Low stock: {med.quantity_remaining} {med.unit} remaining",
+            "urgency": "high"
+        })
+    
+    refill_due = db.query(models.PatientMedication).filter(
+        models.PatientMedication.organization_id == org_id,
+        models.PatientMedication.status == models.MedicationStatusEnum.active,
+        models.PatientMedication.next_refill_date <= date.today(),
+        models.PatientMedication.next_refill_date.isnot(None)
+    ).all()
+    
+    for med in refill_due:
+        alerts.append({
+            "type": "refill_due",
+            "medication_id": med.id,
+            "patient": med.patient.full_name,
+            "drug": med.drug.name,
+            "message": f"Refill overdue",
+            "urgency": "high"
+        })
+    
+    return {"alerts": alerts, "count": len(alerts)}
 
 @app.get("/api/patient-medications/{medication_id}/chat")
 async def get_medication_chat(medication_id: str, request: Request, user: models.User = Depends(require_auth), db: Session = Depends(get_db)):
     messages = db.query(models.MedicationChat).filter(models.MedicationChat.medication_id == medication_id).order_by(models.MedicationChat.created_at).all()
-    return [{"id": m.id, "message": m.message, "is_from_patient": m.is_from_patient, "sender_name": m.patient.full_name if m.is_from_patient else "Pharmacy", "created_at": m.created_at.isoformat()} for m in messages]
+    return [{
+        "id": m.id,
+        "message": m.message,
+        "is_from_patient": m.is_from_patient,
+        "sender_name": m.patient.full_name if m.is_from_patient else (m.user.full_name if m.user else "Pharmacy"),
+        "created_at": m.created_at.isoformat()
+    } for m in messages]
 
 @app.post("/api/patient-medications/{medication_id}/chat")
 async def send_medication_chat(medication_id: str, request: Request, user: models.User = Depends(require_auth), db: Session = Depends(get_db)):
@@ -715,8 +940,15 @@ async def send_medication_chat(medication_id: str, request: Request, user: model
     if not medication:
         raise HTTPException(404, "Not found")
     
-    chat = models.MedicationChat(id=str(uuid.uuid4()), medication_id=medication_id, organization_id=medication.organization_id,
-                                  patient_id=medication.patient_id, user_id=user.id, message=data["message"], is_from_patient=False)
+    chat = models.MedicationChat(
+        id=str(uuid.uuid4()),
+        medication_id=medication_id,
+        organization_id=medication.organization_id,
+        patient_id=medication.patient_id,
+        user_id=user.id,
+        message=data["message"],
+        is_from_patient=False
+    )
     db.add(chat)
     db.commit()
     return {"success": True, "id": chat.id}
@@ -732,11 +964,25 @@ async def check_medication_alerts(request: Request, user: models.User = Depends(
     alerts_created = 0
     for med in medications:
         if med.quantity_remaining <= med.low_stock_threshold:
-            create_reminder(db, med, "low_stock", f"⚠️ Low stock alert: Only {med.quantity_remaining} {med.unit} remaining.")
-            alerts_created += 1
+            existing = db.query(models.MedicationReminder).filter(
+                models.MedicationReminder.medication_id == med.id,
+                models.MedicationReminder.reminder_type == "low_stock",
+                models.MedicationReminder.sent_at >= datetime.now() - timedelta(days=3)
+            ).first()
+            if not existing:
+                create_reminder(db, med, "low_stock", f"⚠️ Low stock alert: Only {med.quantity_remaining} {med.unit} remaining. Please refill soon.")
+                alerts_created += 1
+        
         if med.next_refill_date and med.next_refill_date <= date.today():
-            create_reminder(db, med, "refill_due", f"📅 Refill reminder: Medication refill is overdue.")
-            alerts_created += 1
+            existing = db.query(models.MedicationReminder).filter(
+                models.MedicationReminder.medication_id == med.id,
+                models.MedicationReminder.reminder_type == "refill_due",
+                models.MedicationReminder.sent_at >= datetime.now() - timedelta(days=3)
+            ).first()
+            if not existing:
+                days_overdue = (date.today() - med.next_refill_date).days
+                create_reminder(db, med, "refill_due", f"📅 Refill reminder: Medication refill is {days_overdue} days overdue. Please schedule a refill.")
+                alerts_created += 1
     
     return {"success": True, "alerts_created": alerts_created}
 
@@ -747,11 +993,20 @@ async def initiate_mpesa(request: Request, user: models.User = Depends(require_a
     sale = db.query(models.SalesOrder).filter(models.SalesOrder.id == data["sale_id"]).first()
     if not sale:
         raise HTTPException(404, "Sale not found")
+    
     result = await tuma_service.initiate_payment(data["amount"], data["phone"], sale.sale_number)
     if result["success"]:
-        payment = models.Payment(id=str(uuid.uuid4()), organization_id=sale.organization_id, sale_id=sale.id, amount=data["amount"],
-                                  payment_method=models.PaymentMethodEnum.mpesa, reference=result["reference"], status="pending",
-                                  transaction_id=result["payment_id"], created_by=user.id)
+        payment = models.Payment(
+            id=str(uuid.uuid4()),
+            organization_id=sale.organization_id,
+            sale_id=sale.id,
+            amount=data["amount"],
+            payment_method=models.PaymentMethodEnum.mpesa,
+            reference=result["reference"],
+            status="pending",
+            transaction_id=result["payment_id"],
+            created_by=user.id
+        )
         db.add(payment)
         db.commit()
     return result
@@ -778,21 +1033,40 @@ async def payment_callback(request: Request):
 
 # ==================== REPORTS ====================
 @app.get("/api/reports/sales")
-async def sales_report(request: Request, user: models.User = Depends(require_auth), db: Session = Depends(get_db)):
+async def sales_report(request: Request, user: models.User = Depends(require_auth), db: Session = Depends(get_db), start_date: str = None, end_date: str = None):
     org_id = request.session.get("org_id")
-    sales = db.query(models.SalesOrder).filter(models.SalesOrder.organization_id == org_id).all()
-    return {"total_sales": sum(float(s.total) for s in sales), "count": len(sales)}
+    query = db.query(models.SalesOrder).filter(models.SalesOrder.organization_id == org_id)
+    if start_date:
+        query = query.filter(models.SalesOrder.created_at >= datetime.fromisoformat(start_date))
+    if end_date:
+        query = query.filter(models.SalesOrder.created_at <= datetime.fromisoformat(end_date))
+    sales = query.all()
+    total_sales = sum(s.total for s in sales)
+    return {"total_sales": float(total_sales), "count": len(sales)}
 
 @app.get("/api/reports/inventory")
 async def inventory_report(request: Request, user: models.User = Depends(require_auth), db: Session = Depends(get_db)):
     drugs = db.query(models.Drug).all()
     items = []
+    total_value = 0
     for d in drugs:
         stock = db.query(func.sum(models.InventoryBatch.quantity_on_hand)).filter(models.InventoryBatch.drug_id == d.id).scalar() or 0
-        items.append({"name": d.name, "stock": int(stock), "value": float(stock * d.price)})
-    return {"items": items, "total_value": sum(i["value"] for i in items)}
+        value = stock * d.price
+        total_value += value
+        items.append({"name": d.name, "stock": int(stock), "value": float(value)})
+    return {"items": items, "total_value": float(total_value)}
 
-# ==================== ERROR HANDLER ====================
+# ==================== CATEGORIES & SUPPLIERS ====================
+@app.get("/api/categories")
+async def get_categories(request: Request, user: models.User = Depends(require_auth), db: Session = Depends(get_db)):
+    categories = db.query(models.Category).filter(models.Category.organization_id == request.session.get("org_id")).all()
+    return [{"id": c.id, "name": c.name} for c in categories]
+
+@app.get("/api/suppliers")
+async def get_suppliers(request: Request, user: models.User = Depends(require_auth), db: Session = Depends(get_db)):
+    suppliers = db.query(models.Supplier).filter(models.Supplier.organization_id == request.session.get("org_id")).all()
+    return [{"id": s.id, "name": s.name, "phone": s.phone} for s in suppliers]
+
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
     if exc.status_code == 401:
