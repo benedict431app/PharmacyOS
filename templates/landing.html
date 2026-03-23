@@ -1,121 +1,46 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>PharmaSaaS - Pharmacy Management System</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PharmaSaaS</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
-        .hero { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 80px 20px; text-align: center; }
-        .hero h1 { font-size: 3em; margin-bottom: 20px; }
-        .hero p { font-size: 1.3em; margin-bottom: 30px; opacity: 0.95; }
-        .cta-btn { background: white; color: #667eea; padding: 15px 40px; border-radius: 50px; text-decoration: none; font-size: 1.1em; font-weight: bold; display: inline-block; transition: transform 0.3s; }
-        .cta-btn:hover { transform: scale(1.05); }
-        .cta-btn.secondary { background: transparent; border: 2px solid white; color: white; margin-left: 15px; }
-        .features { padding: 60px 20px; max-width: 1200px; margin: 0 auto; }
-        .features h2 { text-align: center; font-size: 2.5em; margin-bottom: 50px; color: #333; }
-        .feature-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 30px; }
-        .feature-card { background: #f8f9fa; padding: 30px; border-radius: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        .feature-card h3 { color: #667eea; margin-bottom: 15px; font-size: 1.5em; }
-        .feature-card p { color: #666; line-height: 1.6; }
-        .pricing { background: #f8f9fa; padding: 60px 20px; }
-        .pricing h2 { text-align: center; font-size: 2.5em; margin-bottom: 50px; color: #333; }
-        .pricing-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 30px; max-width: 1000px; margin: 0 auto; }
-        .pricing-card { background: white; padding: 40px; border-radius: 15px; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        .pricing-card.featured { border: 3px solid #667eea; transform: scale(1.05); }
-        .price { font-size: 3em; color: #667eea; margin: 20px 0; }
-        .price span { font-size: 0.4em; color: #999; }
-        .login-link { text-align: center; margin-top: 30px; }
-        .login-link a { color: #667eea; text-decoration: none; font-size: 1.1em; }
-        footer { background: #333; color: white; text-align: center; padding: 40px 20px; }
+        body { font-family: Arial, sans-serif; margin: 0; padding: 0; background: #f5f7fa; }
+        .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 60px 20px; text-align: center; }
+        .header h1 { font-size: 48px; margin: 0; }
+        .header p { font-size: 20px; margin: 20px 0; }
+        .btn { display: inline-block; padding: 12px 30px; margin: 10px; border-radius: 5px; text-decoration: none; font-weight: bold; }
+        .btn-primary { background: white; color: #667eea; }
+        .btn-secondary { background: transparent; border: 2px solid white; color: white; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 40px 20px; }
+        .features { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+        .feature { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .feature h3 { color: #667eea; margin-top: 0; }
+        .footer { background: #333; color: white; text-align: center; padding: 20px; }
+        @media (max-width: 768px) { .header h1 { font-size: 32px; } .header p { font-size: 16px; } }
     </style>
 </head>
 <body>
-    <div class="hero">
+    <div class="header">
         <h1>🏥 PharmaSaaS</h1>
-        <p>Complete Pharmacy Management System for Modern Pharmacies</p>
-        <div style="display: flex; gap: 15px; justify-content: center;">
-            <a href="/register" class="cta-btn">Get Started - Sign Up</a>
-            <a href="/login" class="cta-btn secondary">Login</a>
+        <p>Complete Pharmacy Management System</p>
+        <div>
+            <a href="/register" class="btn btn-primary">Get Started</a>
+            <a href="/login" class="btn btn-secondary">Login</a>
         </div>
     </div>
-    
-    <div class="features">
-        <h2>Powerful Features</h2>
-        <div class="feature-grid">
-            <div class="feature-card">
-                <h3>📱 Barcode Scanning</h3>
-                <p>Use your phone camera to scan product barcodes for instant inventory management and quick sales processing.</p>
-            </div>
-            <div class="feature-card">
-                <h3>👥 Multi-User Support</h3>
-                <p>Admin and Pharmacist roles with custom permissions. Admins control everything, pharmacists handle daily operations.</p>
-            </div>
-            <div class="feature-card">
-                <h3>💳 Credit Management</h3>
-                <p>Comprehensive CRM for managing clients with credit accounts, payment tracking, and purchase history.</p>
-            </div>
-            <div class="feature-card">
-                <h3>🤖 AI Assistant</h3>
-                <p>Built-in AI chat to help with drug information, dosage queries, and inventory recommendations.</p>
-            </div>
-            <div class="feature-card">
-                <h3>📊 Analytics Dashboard</h3>
-                <p>Real-time sales analytics, inventory alerts, and comprehensive reporting for data-driven decisions.</p>
-            </div>
-            <div class="feature-card">
-                <h3>🏪 Point of Sale</h3>
-                <p>Fast, intuitive POS system with barcode scanning, multiple payment methods, and receipt generation.</p>
-            </div>
+    <div class="container">
+        <div class="features">
+            <div class="feature"><h3>📱 Barcode Scanning</h3><p>Scan product barcodes instantly</p></div>
+            <div class="feature"><h3>👥 Multi-User Support</h3><p>Admin and Pharmacist roles</p></div>
+            <div class="feature"><h3>💳 Credit Management</h3><p>Manage client credit accounts</p></div>
+            <div class="feature"><h3>🤖 AI Assistant</h3><p>Get drug information</p></div>
+            <div class="feature"><h3>📊 Analytics Dashboard</h3><p>Real-time sales analytics</p></div>
+            <div class="feature"><h3>🏪 Point of Sale</h3><p>Fast POS with M-Pesa</p></div>
         </div>
     </div>
-    
-    <div class="pricing">
-        <h2>Simple Pricing</h2>
-        <div class="pricing-grid">
-            <div class="pricing-card">
-                <h3>Starter</h3>
-                <div class="price">Kes 180 <span>/month</span></div>
-                <p>Perfect for small pharmacies</p>
-                <ul style="text-align: left; margin-top: 20px; color: #666;">
-                    <li>✓ 1 Admin + 2 Pharmacists</li>
-                    <li>✓ Up to 500 products</li>
-                    <li>✓ Basic reporting</li>
-                    <li>✓ Email support</li>
-                </ul>
-            </div>
-            <div class="pricing-card featured">
-                <h3>Professional</h3>
-                <div class="price">Kes 279<span>/month</span></div>
-                <p>Most popular choice</p>
-                <ul style="text-align: left; margin-top: 20px; color: #666;">
-                    <li>✓ Unlimited users</li>
-                    <li>✓ Unlimited products</li>
-                    <li>✓ Advanced analytics</li>
-                    <li>✓ AI assistant</li>
-                    <li>✓ Priority support</li>
-                </ul>
-            </div>
-            <div class="pricing-card">
-                <h3>Enterprise</h3>
-                <div class="price">Kes 499<span>/month</span></div>
-                <p>For pharmacy chains</p>
-                <ul style="text-align: left; margin-top: 20px; color: #666;">
-                    <li>✓ Multiple locations</li>
-                    <li>✓ Custom integrations</li>
-                    <li>✓ Dedicated account manager</li>
-                    <li>✓ 24/7 phone support</li>
-                </ul>
-            </div>
-        </div>
-        <div class="login-link">
-            <p>Already have an account? <a href="/login">Login here</a></p>
-        </div>
-    </div>
-    
-    <footer>
+    <div class="footer">
         <p>&copy; 2025 PharmaSaaS. All rights reserved.</p>
-        <p>Transform your pharmacy with intelligent management.</p>
-    </footer>
+    </div>
 </body>
 </html>
