@@ -1,7 +1,6 @@
 import bcrypt
 import types
 
-# BCrypt workaround
 try:
     bcrypt.__about__
 except AttributeError:
@@ -218,8 +217,9 @@ app.add_middleware(SessionMiddleware, secret_key=secrets.token_urlsafe(32), max_
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# Use simple template loading
 templates = Jinja2Templates(directory="templates")
-templates.env.cache = {}
 
 cohere_service = CohereService()
 tuma_service = TumaMpesaService()
@@ -736,19 +736,6 @@ async def ai_chat(request: Request, user: models.User = Depends(require_auth), d
     
     return {"sessionId": session_id, "response": response}
 
-@app.get("/api/ai/sessions")
-async def get_ai_sessions(request: Request, user: models.User = Depends(require_auth), db: Session = Depends(get_db)):
-    sessions = db.query(models.AIChatSession).filter(models.AIChatSession.user_id == user.id).order_by(models.AIChatSession.updated_at.desc()).all()
-    return [{"id": s.id, "title": s.title, "created_at": s.created_at.isoformat()} for s in sessions]
-
-@app.get("/api/ai/sessions/{session_id}/messages")
-async def get_ai_messages(session_id: str, request: Request, user: models.User = Depends(require_auth), db: Session = Depends(get_db)):
-    session = db.query(models.AIChatSession).filter(models.AIChatSession.id == session_id, models.AIChatSession.user_id == user.id).first()
-    if not session:
-        raise HTTPException(404, "Session not found")
-    messages = db.query(models.AIChatMessage).filter(models.AIChatMessage.session_id == session_id).order_by(models.AIChatMessage.created_at).all()
-    return [{"id": m.id, "role": m.role, "content": m.content, "created_at": m.created_at.isoformat()} for m in messages]
-
 # ==================== PATIENT MEDICATION MONITORING ====================
 @app.get("/patient-medications", response_class=HTMLResponse)
 async def patient_medications_page(request: Request, user: models.User = Depends(require_auth)):
@@ -834,8 +821,7 @@ async def refill_medication(medication_id: str, request: Request, user: models.U
     if not medication:
         raise HTTPException(404, "Not found")
     
-    quantity_refilled = data.get("quantity", 0)
-    medication.quantity_remaining += quantity_refilled
+    medication.quantity_remaining += data.get("quantity", 0)
     medication.last_refill_date = datetime.now().date()
     
     if medication.end_date:
@@ -843,7 +829,7 @@ async def refill_medication(medication_id: str, request: Request, user: models.U
     
     db.commit()
     
-    create_reminder(db, medication, "refill_due", f"Medication refilled: {quantity_refilled} {medication.unit} added. New stock: {medication.quantity_remaining}")
+    create_reminder(db, medication, "refill_due", f"Medication refilled. New stock: {medication.quantity_remaining}")
     
     return {"success": True, "new_quantity": medication.quantity_remaining}
 
@@ -854,14 +840,13 @@ async def adjust_medication_stock(medication_id: str, request: Request, user: mo
     if not medication:
         raise HTTPException(404, "Not found")
     
-    new_quantity = data.get("quantity", 0)
-    medication.quantity_remaining = new_quantity
+    medication.quantity_remaining = data.get("quantity", 0)
     db.commit()
     
-    if new_quantity <= medication.low_stock_threshold:
-        create_reminder(db, medication, "low_stock", f"Low stock alert: Only {new_quantity} {medication.unit} remaining")
+    if medication.quantity_remaining <= medication.low_stock_threshold:
+        create_reminder(db, medication, "low_stock", f"Low stock alert: Only {medication.quantity_remaining} remaining")
     
-    return {"success": True, "new_quantity": new_quantity}
+    return {"success": True, "new_quantity": medication.quantity_remaining}
 
 @app.get("/api/patient-medications/alerts")
 async def get_medication_alerts(request: Request, user: models.User = Depends(require_auth), db: Session = Depends(get_db)):
@@ -880,24 +865,7 @@ async def get_medication_alerts(request: Request, user: models.User = Depends(re
             "medication_id": med.id,
             "patient": med.patient.full_name,
             "drug": med.drug.name,
-            "message": f"Low stock: {med.quantity_remaining} {med.unit} remaining",
-            "urgency": "high"
-        })
-    
-    refill_due = db.query(models.PatientMedication).filter(
-        models.PatientMedication.organization_id == org_id,
-        models.PatientMedication.status == models.MedicationStatusEnum.active,
-        models.PatientMedication.next_refill_date <= date.today(),
-        models.PatientMedication.next_refill_date.isnot(None)
-    ).all()
-    
-    for med in refill_due:
-        alerts.append({
-            "type": "refill_due",
-            "medication_id": med.id,
-            "patient": med.patient.full_name,
-            "drug": med.drug.name,
-            "message": f"Refill overdue",
+            "message": f"Low stock: {med.quantity_remaining} remaining",
             "urgency": "high"
         })
     
@@ -933,38 +901,6 @@ async def send_medication_chat(medication_id: str, request: Request, user: model
     db.add(chat)
     db.commit()
     return {"success": True, "id": chat.id}
-
-@app.post("/api/check-medication-alerts")
-async def check_medication_alerts(request: Request, user: models.User = Depends(require_auth), db: Session = Depends(get_db)):
-    org_id = request.session.get("org_id")
-    medications = db.query(models.PatientMedication).filter(
-        models.PatientMedication.organization_id == org_id,
-        models.PatientMedication.status == models.MedicationStatusEnum.active
-    ).all()
-    
-    alerts_created = 0
-    for med in medications:
-        if med.quantity_remaining <= med.low_stock_threshold:
-            existing = db.query(models.MedicationReminder).filter(
-                models.MedicationReminder.medication_id == med.id,
-                models.MedicationReminder.reminder_type == "low_stock",
-                models.MedicationReminder.sent_at >= datetime.now() - timedelta(days=3)
-            ).first()
-            if not existing:
-                create_reminder(db, med, "low_stock", f"⚠️ Low stock alert: Only {med.quantity_remaining} {med.unit} remaining. Please refill soon.")
-                alerts_created += 1
-        
-        if med.next_refill_date and med.next_refill_date <= date.today():
-            existing = db.query(models.MedicationReminder).filter(
-                models.MedicationReminder.medication_id == med.id,
-                models.MedicationReminder.reminder_type == "refill_due",
-                models.MedicationReminder.sent_at >= datetime.now() - timedelta(days=3)
-            ).first()
-            if not existing:
-                create_reminder(db, med, "refill_due", f"📅 Refill reminder: Medication refill is overdue. Please schedule a refill.")
-                alerts_created += 1
-    
-    return {"success": True, "alerts_created": alerts_created}
 
 # ==================== MPESA PAYMENTS ====================
 @app.post("/api/payment/mpesa/initiate")
@@ -1013,28 +949,19 @@ async def payment_callback(request: Request):
 
 # ==================== REPORTS ====================
 @app.get("/api/reports/sales")
-async def sales_report(request: Request, user: models.User = Depends(require_auth), db: Session = Depends(get_db), start_date: str = None, end_date: str = None):
+async def sales_report(request: Request, user: models.User = Depends(require_auth), db: Session = Depends(get_db)):
     org_id = request.session.get("org_id")
-    query = db.query(models.SalesOrder).filter(models.SalesOrder.organization_id == org_id)
-    if start_date:
-        query = query.filter(models.SalesOrder.created_at >= datetime.fromisoformat(start_date))
-    if end_date:
-        query = query.filter(models.SalesOrder.created_at <= datetime.fromisoformat(end_date))
-    sales = query.all()
-    total_sales = sum(s.total for s in sales)
-    return {"total_sales": float(total_sales), "count": len(sales)}
+    sales = db.query(models.SalesOrder).filter(models.SalesOrder.organization_id == org_id).all()
+    return {"total_sales": sum(float(s.total) for s in sales), "count": len(sales)}
 
 @app.get("/api/reports/inventory")
 async def inventory_report(request: Request, user: models.User = Depends(require_auth), db: Session = Depends(get_db)):
     drugs = db.query(models.Drug).all()
     items = []
-    total_value = 0
     for d in drugs:
         stock = db.query(func.sum(models.InventoryBatch.quantity_on_hand)).filter(models.InventoryBatch.drug_id == d.id).scalar() or 0
-        value = stock * d.price
-        total_value += value
-        items.append({"name": d.name, "stock": int(stock), "value": float(value)})
-    return {"items": items, "total_value": float(total_value)}
+        items.append({"name": d.name, "stock": int(stock), "value": float(stock * d.price)})
+    return {"items": items, "total_value": sum(i["value"] for i in items)}
 
 # ==================== CATEGORIES & SUPPLIERS ====================
 @app.get("/api/categories")
@@ -1047,6 +974,7 @@ async def get_suppliers(request: Request, user: models.User = Depends(require_au
     suppliers = db.query(models.Supplier).filter(models.Supplier.organization_id == request.session.get("org_id")).all()
     return [{"id": s.id, "name": s.name, "phone": s.phone} for s in suppliers]
 
+# ==================== ERROR HANDLER ====================
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
     if exc.status_code == 401:
