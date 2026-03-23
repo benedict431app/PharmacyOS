@@ -268,6 +268,108 @@ class CreditPayment(Base):
     
     customer = relationship("Customer", back_populates="credit_payments")
 
+
+# Add these new models to your existing models.py
+
+class PatientMedication(models.Model):
+    """Track patients on regular medications"""
+    __tablename__ = "patient_medications"
+    
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    organization_id = Column(String(36), ForeignKey("organizations.id"), nullable=False)
+    patient_id = Column(String(36), ForeignKey("customers.id"), nullable=False)
+    
+    # Medication details
+    drug_id = Column(String(36), ForeignKey("drugs.id"), nullable=False)
+    dosage_instructions = Column(Text, nullable=False)  # e.g., "Take 1 tablet every 8 hours"
+    quantity_given = Column(Integer, nullable=False)  # Total quantity given to patient
+    quantity_remaining = Column(Integer, nullable=False)  # Remaining quantity
+    unit = Column(String(20), default="tablets")  # tablets, capsules, ml, etc.
+    
+    # Schedule
+    start_date = Column(Date, nullable=False)
+    end_date = Column(Date, nullable=True)  # Expected end date based on dosage
+    next_refill_date = Column(Date, nullable=True)  # When to refill
+    last_refill_date = Column(Date, nullable=True)
+    
+    # Reminder settings
+    reminder_days_before = Column(Integer, default=3)  # Remind X days before refill
+    low_stock_threshold = Column(Integer, default=10)  # Alert when remaining <= this
+    
+    # Status
+    status = Column(Enum('active', 'completed', 'discontinued', name='medication_status'), default='active')
+    notes = Column(Text, nullable=True)
+    
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_by = Column(String(36), ForeignKey("users.id"))
+    
+    # Relationships
+    patient = relationship("Customer", backref="medications")
+    drug = relationship("Drug", backref="patient_medications")
+    organization = relationship("Organization", backref="patient_medications")
+    
+class MedicationRefill(models.Model):
+    """Track medication refills"""
+    __tablename__ = "medication_refills"
+    
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    medication_id = Column(String(36), ForeignKey("patient_medications.id"), nullable=False)
+    organization_id = Column(String(36), ForeignKey("organizations.id"), nullable=False)
+    
+    refill_date = Column(Date, nullable=False)
+    quantity_refilled = Column(Integer, nullable=False)
+    previous_quantity = Column(Integer, nullable=False)
+    new_quantity = Column(Integer, nullable=False)
+    notes = Column(Text, nullable=True)
+    created_by = Column(String(36), ForeignKey("users.id"))
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+class MedicationReminder(models.Model):
+    """Track reminders sent to patients"""
+    __tablename__ = "medication_reminders"
+    
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    medication_id = Column(String(36), ForeignKey("patient_medications.id"), nullable=False)
+    organization_id = Column(String(36), ForeignKey("organizations.id"), nullable=False)
+    patient_id = Column(String(36), ForeignKey("customers.id"), nullable=False)
+    
+    reminder_type = Column(Enum('low_stock', 'refill_due', 'missed_dose', 'general', name='reminder_type'), nullable=False)
+    message = Column(Text, nullable=False)
+    sent_at = Column(DateTime, default=datetime.utcnow)
+    is_read = Column(Boolean, default=False)
+    read_at = Column(DateTime, nullable=True)
+    
+    # For SMS/Email tracking
+    sms_sent = Column(Boolean, default=False)
+    email_sent = Column(Boolean, default=False)
+    
+    # Relationships
+    medication = relationship("PatientMedication", backref="reminders")
+    patient = relationship("Customer", backref="medication_reminders")
+    
+class MedicationChat(models.Model):
+    """Chat between pharmacy and patient about medication"""
+    __tablename__ = "medication_chats"
+    
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    medication_id = Column(String(36), ForeignKey("patient_medications.id"), nullable=False)
+    organization_id = Column(String(36), ForeignKey("organizations.id"), nullable=False)
+    patient_id = Column(String(36), ForeignKey("customers.id"), nullable=False)
+    user_id = Column(String(36), ForeignKey("users.id"), nullable=True)  # Pharmacy staff
+    
+    message = Column(Text, nullable=False)
+    is_from_patient = Column(Boolean, default=False)
+    is_read = Column(Boolean, default=False)
+    read_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    medication = relationship("PatientMedication", backref="chats")
+    patient = relationship("Customer", backref="medication_chats")
+    user = relationship("User", backref="medication_chats")
+
 class AIChatSession(Base):
     __tablename__ = "ai_chat_sessions"
     
