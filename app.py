@@ -201,7 +201,7 @@ def create_demo_data(db: Session):
         last_refill_date=date.today() - timedelta(days=25),
         reminder_days_before=3,
         low_stock_threshold=10,
-        status="active",
+        status=models.MedicationStatusEnum.active,
         notes="Patient has hypertension, monitor blood pressure",
         created_by=admin.id
     )
@@ -227,14 +227,14 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, 
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# Fix template caching
+# FIX: Create templates with custom environment to avoid cache issues
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 env = Environment(
     loader=FileSystemLoader("templates"),
     autoescape=select_autoescape(["html", "xml"]),
-    cache_size=0
+    cache_size=0  # Disable template caching completely
 )
-templates = Jinja2Templates(directory="templates", env=env)
+templates = Jinja2Templates(env=env)  # Pass only env, not directory
 
 cohere_service = CohereService()
 tuma_service = TumaMpesaService()
@@ -258,7 +258,6 @@ def require_role(*roles):
         return user
     return decorator
 
-# Helper function to create reminders
 def create_reminder(db: Session, medication, reminder_type, message):
     reminder = models.MedicationReminder(
         id=str(uuid.uuid4()),
@@ -359,10 +358,9 @@ async def dashboard(request: Request, user: models.User = Depends(require_auth),
     
     recent_sales = db.query(models.SalesOrder).filter(models.SalesOrder.organization_id == org_id).order_by(models.SalesOrder.created_at.desc()).limit(5).all()
     
-    # Get medication alerts count
     medication_alerts = db.query(models.PatientMedication).filter(
         models.PatientMedication.organization_id == org_id,
-        models.PatientMedication.status == "active",
+        models.PatientMedication.status == models.MedicationStatusEnum.active,
         or_(
             models.PatientMedication.quantity_remaining <= models.PatientMedication.low_stock_threshold,
             models.PatientMedication.next_refill_date <= date.today()
@@ -408,7 +406,7 @@ async def get_inventory(request: Request, user: models.User = Depends(require_au
             "id": d.id, "name": d.name, "generic_name": d.generic_name, "manufacturer": d.manufacturer,
             "form": d.form.value, "strength": d.strength, "strength_unit": d.strength_unit.value,
             "price": float(d.price), "stock": int(stock), "reorder_level": d.reorder_level,
-            "barcode": d.barcode, "description": d.description
+            "barcode": d.barcode
         })
     return {"items": items, "total": total, "page": page, "limit": limit, "pages": (total + limit - 1) // limit}
 
@@ -674,39 +672,6 @@ async def payment_callback(request: Request):
     db.close()
     return {"status": "received"}
 
-# ==================== REPORTS ====================
-@app.get("/api/reports/sales")
-async def sales_report(request: Request, user: models.User = Depends(require_auth), db: Session = Depends(get_db), start_date: str = None, end_date: str = None):
-    org_id = request.session.get("org_id")
-    query = db.query(models.SalesOrder).filter(models.SalesOrder.organization_id == org_id)
-    if start_date:
-        query = query.filter(models.SalesOrder.created_at >= datetime.fromisoformat(start_date))
-    if end_date:
-        query = query.filter(models.SalesOrder.created_at <= datetime.fromisoformat(end_date))
-    sales = query.all()
-    total_sales = sum(s.total for s in sales)
-    return {"total_sales": float(total_sales), "count": len(sales)}
-
-@app.get("/api/reports/inventory")
-async def inventory_report(request: Request, user: models.User = Depends(require_auth), db: Session = Depends(get_db)):
-    drugs = db.query(models.Drug).all()
-    items = []
-    for d in drugs:
-        stock = db.query(func.sum(models.InventoryBatch.quantity_on_hand)).filter(models.InventoryBatch.drug_id == d.id).scalar() or 0
-        items.append({"name": d.name, "stock": int(stock), "value": float(stock * d.price)})
-    return {"items": items, "total_value": sum(i["value"] for i in items)}
-
-# ==================== CATEGORIES & SUPPLIERS ====================
-@app.get("/api/categories")
-async def get_categories(request: Request, user: models.User = Depends(require_auth), db: Session = Depends(get_db)):
-    categories = db.query(models.Category).filter(models.Category.organization_id == request.session.get("org_id")).all()
-    return [{"id": c.id, "name": c.name, "description": c.description} for c in categories]
-
-@app.get("/api/suppliers")
-async def get_suppliers(request: Request, user: models.User = Depends(require_auth), db: Session = Depends(get_db)):
-    suppliers = db.query(models.Supplier).filter(models.Supplier.organization_id == request.session.get("org_id")).all()
-    return [{"id": s.id, "name": s.name, "contact_person": s.contact_person, "email": s.email, "phone": s.phone} for s in suppliers]
-
 # ==================== PATIENT MEDICATION MONITORING ====================
 @app.get("/patient-medications", response_class=HTMLResponse)
 async def patient_medications_page(request: Request, user: models.User = Depends(require_auth)):
@@ -724,9 +689,11 @@ async def get_patient_medications(
     org_id = request.session.get("org_id")
     offset = (page - 1) * limit
     
+    status_enum = models.MedicationStatusEnum.active if status == "active" else (models.MedicationStatusEnum.completed if status == "completed" else models.MedicationStatusEnum.discontinued)
+    
     query = db.query(models.PatientMedication).filter(
         models.PatientMedication.organization_id == org_id,
-        models.PatientMedication.status == status
+        models.PatientMedication.status == status_enum
     )
     
     total = query.count()
@@ -762,7 +729,7 @@ async def get_patient_medications(
             "next_refill_date": med.next_refill_date.isoformat() if med.next_refill_date else None,
             "days_remaining": days_remaining,
             "needs_alert": needs_alert,
-            "status": med.status,
+            "status": med.status.value if med.status else "active",
             "notes": med.notes
         })
     
@@ -806,7 +773,7 @@ async def add_patient_medication(
             last_refill_date=datetime.now().date(),
             reminder_days_before=data.get("reminder_days_before", 3),
             low_stock_threshold=data.get("low_stock_threshold", 10),
-            status="active",
+            status=models.MedicationStatusEnum.active,
             notes=data.get("notes", ""),
             created_by=user.id
         )
@@ -814,7 +781,8 @@ async def add_patient_medication(
         db.commit()
         
         if medication.quantity_remaining <= medication.low_stock_threshold:
-            create_reminder(db, medication, "low_stock", f"Low stock alert: Only {medication.quantity_remaining} {medication.unit} remaining for {medication.patient.full_name}")
+            create_reminder(db, medication, models.ReminderTypeEnum.low_stock, 
+                           f"Low stock alert: Only {medication.quantity_remaining} {medication.unit} remaining for {medication.patient.full_name}")
         
         return {"success": True, "id": medication.id}
         
@@ -866,7 +834,7 @@ async def refill_medication(
         
         db.commit()
         
-        create_reminder(db, medication, "refill_due", 
+        create_reminder(db, medication, models.ReminderTypeEnum.refill_due, 
                        f"Medication refilled: {quantity_refilled} {medication.unit} added. New stock: {new_quantity} {medication.unit}")
         
         return {"success": True, "new_quantity": new_quantity}
@@ -904,7 +872,7 @@ async def adjust_medication_stock(
         db.commit()
         
         if new_quantity <= medication.low_stock_threshold:
-            create_reminder(db, medication, "low_stock", 
+            create_reminder(db, medication, models.ReminderTypeEnum.low_stock, 
                            f"Low stock alert: Only {new_quantity} {medication.unit} remaining")
         
         return {"success": True, "new_quantity": new_quantity}
@@ -925,7 +893,7 @@ async def get_medication_alerts(
     
     low_stock = db.query(models.PatientMedication).filter(
         models.PatientMedication.organization_id == org_id,
-        models.PatientMedication.status == "active",
+        models.PatientMedication.status == models.MedicationStatusEnum.active,
         models.PatientMedication.quantity_remaining <= models.PatientMedication.low_stock_threshold
     ).all()
     
@@ -941,7 +909,7 @@ async def get_medication_alerts(
     
     refill_due = db.query(models.PatientMedication).filter(
         models.PatientMedication.organization_id == org_id,
-        models.PatientMedication.status == "active",
+        models.PatientMedication.status == models.MedicationStatusEnum.active,
         models.PatientMedication.next_refill_date <= date.today(),
         models.PatientMedication.next_refill_date.isnot(None)
     ).all()
@@ -1047,7 +1015,7 @@ async def get_patient_reminders(
         "id": r.id,
         "patient": r.patient.full_name,
         "drug": r.medication.drug.name,
-        "type": r.reminder_type,
+        "type": r.reminder_type.value if r.reminder_type else "general",
         "message": r.message,
         "sent_at": r.sent_at.isoformat(),
         "is_read": r.is_read
@@ -1083,7 +1051,7 @@ async def check_medication_alerts(
     
     medications = db.query(models.PatientMedication).filter(
         models.PatientMedication.organization_id == org_id,
-        models.PatientMedication.status == "active"
+        models.PatientMedication.status == models.MedicationStatusEnum.active
     ).all()
     
     alerts_created = 0
@@ -1092,29 +1060,62 @@ async def check_medication_alerts(
         if med.quantity_remaining <= med.low_stock_threshold:
             existing = db.query(models.MedicationReminder).filter(
                 models.MedicationReminder.medication_id == med.id,
-                models.MedicationReminder.reminder_type == "low_stock",
+                models.MedicationReminder.reminder_type == models.ReminderTypeEnum.low_stock,
                 models.MedicationReminder.sent_at >= datetime.now() - timedelta(days=3)
             ).first()
             
             if not existing:
-                create_reminder(db, med, "low_stock", 
+                create_reminder(db, med, models.ReminderTypeEnum.low_stock, 
                                f"⚠️ Low stock alert: Only {med.quantity_remaining} {med.unit} remaining. Please refill soon.")
                 alerts_created += 1
         
         if med.next_refill_date and med.next_refill_date <= date.today():
             existing = db.query(models.MedicationReminder).filter(
                 models.MedicationReminder.medication_id == med.id,
-                models.MedicationReminder.reminder_type == "refill_due",
+                models.MedicationReminder.reminder_type == models.ReminderTypeEnum.refill_due,
                 models.MedicationReminder.sent_at >= datetime.now() - timedelta(days=3)
             ).first()
             
             if not existing:
                 days_overdue = (date.today() - med.next_refill_date).days
-                create_reminder(db, med, "refill_due", 
+                create_reminder(db, med, models.ReminderTypeEnum.refill_due, 
                                f"📅 Refill reminder: Medication refill is {days_overdue} days overdue. Please schedule a refill.")
                 alerts_created += 1
     
     return {"success": True, "alerts_created": alerts_created}
+
+# ==================== REPORTS ====================
+@app.get("/api/reports/sales")
+async def sales_report(request: Request, user: models.User = Depends(require_auth), db: Session = Depends(get_db), start_date: str = None, end_date: str = None):
+    org_id = request.session.get("org_id")
+    query = db.query(models.SalesOrder).filter(models.SalesOrder.organization_id == org_id)
+    if start_date:
+        query = query.filter(models.SalesOrder.created_at >= datetime.fromisoformat(start_date))
+    if end_date:
+        query = query.filter(models.SalesOrder.created_at <= datetime.fromisoformat(end_date))
+    sales = query.all()
+    total_sales = sum(s.total for s in sales)
+    return {"total_sales": float(total_sales), "count": len(sales)}
+
+@app.get("/api/reports/inventory")
+async def inventory_report(request: Request, user: models.User = Depends(require_auth), db: Session = Depends(get_db)):
+    drugs = db.query(models.Drug).all()
+    items = []
+    for d in drugs:
+        stock = db.query(func.sum(models.InventoryBatch.quantity_on_hand)).filter(models.InventoryBatch.drug_id == d.id).scalar() or 0
+        items.append({"name": d.name, "stock": int(stock), "value": float(stock * d.price)})
+    return {"items": items, "total_value": sum(i["value"] for i in items)}
+
+# ==================== CATEGORIES & SUPPLIERS ====================
+@app.get("/api/categories")
+async def get_categories(request: Request, user: models.User = Depends(require_auth), db: Session = Depends(get_db)):
+    categories = db.query(models.Category).filter(models.Category.organization_id == request.session.get("org_id")).all()
+    return [{"id": c.id, "name": c.name, "description": c.description} for c in categories]
+
+@app.get("/api/suppliers")
+async def get_suppliers(request: Request, user: models.User = Depends(require_auth), db: Session = Depends(get_db)):
+    suppliers = db.query(models.Supplier).filter(models.Supplier.organization_id == request.session.get("org_id")).all()
+    return [{"id": s.id, "name": s.name, "contact_person": s.contact_person, "email": s.email, "phone": s.phone} for s in suppliers]
 
 # ==================== ERROR HANDLER ====================
 @app.exception_handler(HTTPException)
