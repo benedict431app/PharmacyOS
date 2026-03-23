@@ -8,7 +8,7 @@ except AttributeError:
     bcrypt.__about__ = types.SimpleNamespace()
     bcrypt.__about__.__version__ = "3.2.0"
 
-from fastapi import FastAPI, Request, Form, HTTPException, Depends, status
+from fastapi import FastAPI, Request, Form, HTTPException, Depends
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -27,7 +27,7 @@ import httpx
 from database import engine, get_db, Base
 import models
 
-# ==================== TUMA MPESA CONFIGURATION ====================
+# ==================== CONFIGURATION ====================
 TUMA_API_KEY = "tuma_a16e1b5f60f0999dd52359a12785255ef165a9b847686536731540052d16808e_1773652843"
 TUMA_EMAIL = "benedicto431@gmail.com"
 TUMA_BASE_URL = "https://tuma.ke/api/v1"
@@ -43,14 +43,10 @@ def hash_password(password: str) -> str:
     password = str(password).strip()
     if len(password) < 6:
         raise ValueError("Password must be at least 6 characters")
-    if len(password) > 128:
-        raise ValueError("Password must be 128 characters or less")
     return pwd_context.hash(password, scheme="pbkdf2_sha256")
 
 def verify_password(password: str, hashed_password: str) -> bool:
     password = str(password).strip()
-    if len(password) > 128:
-        password = password[:128]
     if not hashed_password:
         return False
     try:
@@ -58,7 +54,7 @@ def verify_password(password: str, hashed_password: str) -> bool:
     except:
         return False
 
-# ==================== TUMA MPESA SERVICE ====================
+# ==================== SERVICES ====================
 class TumaMpesaService:
     def __init__(self):
         self.api_key = TUMA_API_KEY
@@ -68,7 +64,6 @@ class TumaMpesaService:
     async def initiate_payment(self, amount: float, phone: str, reference: str = None) -> dict:
         if not reference:
             reference = f"INV-{datetime.now().strftime('%Y%m%d%H%M%S')}"
-        
         phone = phone.strip()
         if phone.startswith('0'):
             phone = '254' + phone[1:]
@@ -89,18 +84,10 @@ class TumaMpesaService:
                     },
                     timeout=30.0
                 )
-                
                 if response.status_code == 200:
                     data = response.json()
-                    return {
-                        "success": True,
-                        "payment_id": data.get("payment_id"),
-                        "reference": reference,
-                        "checkout_url": data.get("checkout_url"),
-                        "status": "pending"
-                    }
-                else:
-                    return {"success": False, "error": f"Payment initiation failed"}
+                    return {"success": True, "payment_id": data.get("payment_id"), "reference": reference}
+                return {"success": False, "error": "Payment initiation failed"}
             except Exception as e:
                 return {"success": False, "error": str(e)}
     
@@ -111,20 +98,13 @@ class TumaMpesaService:
                     f"{self.base_url}/payments/{payment_id}",
                     params={"api_key": self.api_key}
                 )
-                
                 if response.status_code == 200:
                     data = response.json()
-                    return {
-                        "success": True,
-                        "status": data.get("status"),
-                        "payment_id": payment_id,
-                    }
-                else:
-                    return {"success": False, "error": "Failed to check payment status"}
+                    return {"success": True, "status": data.get("status")}
+                return {"success": False, "error": "Failed to check status"}
             except Exception as e:
                 return {"success": False, "error": str(e)}
 
-# ==================== COHERE AI SERVICE ====================
 class CohereService:
     def __init__(self):
         api_key = os.getenv("COHERE_API_KEY")
@@ -133,28 +113,21 @@ class CohereService:
     
     async def get_drug_information(self, query: str) -> str:
         if not self.client:
-            return "AI assistant is not configured. Please add your COHERE_API_KEY to use this feature."
+            return "AI assistant not configured. Please add COHERE_API_KEY."
         try:
             response = self.client.chat(
                 model=self.model,
                 message=query,
-                preamble="""You are an expert pharmacist assistant. Provide accurate, helpful information about:
-- Drug information, usage, and dosages
-- Drug interactions and contraindications
-- Side effects and warnings
-- Medical conditions and treatments
-- Medication safety and storage
-Always be clear, professional, and remind users to consult healthcare professionals for personalized advice.""",
+                preamble="You are an expert pharmacist assistant. Provide accurate information about drugs, dosages, interactions, and side effects. Always remind users to consult healthcare professionals.",
                 max_tokens=1024
             )
             return response.text
         except Exception as e:
-            return f"I'm sorry, I encountered an error: {str(e)}"
+            return f"Error: {str(e)}"
 
-# ==================== DATABASE INITIALIZATION ====================
+# ==================== DEMO DATA ====================
 def create_demo_data(db: Session):
-    existing_org = db.query(models.Organization).filter(models.Organization.name == "Demo Pharmacy").first()
-    if existing_org:
+    if db.query(models.Organization).filter(models.Organization.name == "Demo Pharmacy").first():
         return
     
     print("Creating demo data...")
@@ -172,7 +145,7 @@ def create_demo_data(db: Session):
     db.add(org)
     db.flush()
     
-    admin_user = models.User(
+    admin = models.User(
         id=str(uuid.uuid4()),
         organization_id=org.id,
         username="admin",
@@ -184,7 +157,7 @@ def create_demo_data(db: Session):
         phone="555-0101"
     )
     
-    pharmacist_user = models.User(
+    pharmacist = models.User(
         id=str(uuid.uuid4()),
         organization_id=org.id,
         username="pharmacist",
@@ -195,8 +168,7 @@ def create_demo_data(db: Session):
         is_active=True,
         phone="555-0102"
     )
-    
-    db.add_all([admin_user, pharmacist_user])
+    db.add_all([admin, pharmacist])
     db.flush()
     
     category = models.Category(
@@ -214,117 +186,39 @@ def create_demo_data(db: Session):
         name="MediSupplies Ltd",
         contact_person="John Supplier",
         email="supplies@medisupplies.com",
-        phone="555-0200",
-        address="456 Supply Street, City, State"
+        phone="555-0200"
     )
     db.add(supplier)
     db.flush()
     
-    demo_drugs = [
-        models.Drug(
-            id=str(uuid.uuid4()),
-            organization_id=org.id,
-            name="Paracetamol 500mg",
-            generic_name="Paracetamol",
-            manufacturer="Generic Pharma",
-            form=models.DrugFormEnum.tablet,
-            strength=500.0,
-            strength_unit=models.StrengthUnitEnum.mg,
-            category_id=category.id,
-            supplier_id=supplier.id,
-            description="Pain reliever and fever reducer",
-            usage_instructions="Take 1-2 tablets every 4-6 hours as needed",
-            side_effects="May cause nausea or rash in rare cases",
-            contraindications="Liver disease, alcohol dependence",
-            price=50.0,
-            reorder_level=100,
-            barcode="123456789012"
-        ),
-        models.Drug(
-            id=str(uuid.uuid4()),
-            organization_id=org.id,
-            name="Amoxicillin 500mg Capsules",
-            generic_name="Amoxicillin",
-            manufacturer="Antibio Labs",
-            form=models.DrugFormEnum.capsule,
-            strength=500.0,
-            strength_unit=models.StrengthUnitEnum.mg,
-            category_id=category.id,
-            supplier_id=supplier.id,
-            description="Broad-spectrum antibiotic",
-            usage_instructions="Take as prescribed, usually 3 times daily",
-            side_effects="Diarrhea, nausea, rash",
-            contraindications="Penicillin allergy",
-            price=150.0,
-            reorder_level=50,
-            barcode="123456789013"
-        ),
-        models.Drug(
-            id=str(uuid.uuid4()),
-            organization_id=org.id,
-            name="Ibuprofen 400mg",
-            generic_name="Ibuprofen",
-            manufacturer="PainFree Inc",
-            form=models.DrugFormEnum.tablet,
-            strength=400.0,
-            strength_unit=models.StrengthUnitEnum.mg,
-            category_id=category.id,
-            supplier_id=supplier.id,
-            description="NSAID for pain and inflammation",
-            usage_instructions="Take with food, 1 tablet every 6-8 hours",
-            side_effects="Stomach upset, dizziness",
-            contraindications="Stomach ulcers, kidney problems",
-            price=80.0,
-            reorder_level=75,
-            barcode="123456789014"
-        )
+    drugs = [
+        models.Drug(id=str(uuid.uuid4()), organization_id=org.id, name="Paracetamol 500mg", generic_name="Paracetamol", form=models.DrugFormEnum.tablet, strength=500.0, strength_unit=models.StrengthUnitEnum.mg, category_id=category.id, supplier_id=supplier.id, price=50.0, reorder_level=100, barcode="123456789012"),
+        models.Drug(id=str(uuid.uuid4()), organization_id=org.id, name="Amoxicillin 500mg", generic_name="Amoxicillin", form=models.DrugFormEnum.capsule, strength=500.0, strength_unit=models.StrengthUnitEnum.mg, category_id=category.id, supplier_id=supplier.id, price=150.0, reorder_level=50, barcode="123456789013"),
+        models.Drug(id=str(uuid.uuid4()), organization_id=org.id, name="Ibuprofen 400mg", generic_name="Ibuprofen", form=models.DrugFormEnum.tablet, strength=400.0, strength_unit=models.StrengthUnitEnum.mg, category_id=category.id, supplier_id=supplier.id, price=80.0, reorder_level=75, barcode="123456789014")
     ]
-    
-    db.add_all(demo_drugs)
+    db.add_all(drugs)
     db.flush()
     
-    for drug in demo_drugs:
-        batch = models.InventoryBatch(
-            id=str(uuid.uuid4()),
-            drug_id=drug.id,
-            lot_number=f"LOT-001-{drug.name[:5].upper()}",
-            quantity_on_hand=200,
-            expiry_date=date(2026, 12, 31),
-            purchase_date=date(2025, 1, 1),
-            cost_price=drug.price * 0.6,
+    for drug in drugs:
+        db.add(models.InventoryBatch(
+            id=str(uuid.uuid4()), drug_id=drug.id, lot_number=f"LOT-{drug.name[:5]}", quantity_on_hand=200,
+            expiry_date=date(2026, 12, 31), purchase_date=date(2025, 1, 1), cost_price=drug.price * 0.6,
             status=models.BatchStatusEnum.active
-        )
-        db.add(batch)
+        ))
     
-    demo_customer = models.Customer(
-        id=str(uuid.uuid4()),
-        organization_id=org.id,
-        first_name="John",
-        last_name="Smith",
-        email="john.smith@example.com",
-        phone="555-0100",
-        address="789 Customer Ave, City, State",
-        date_of_birth=date(1985, 5, 15),
-        allergies="Penicillin, Sulfa drugs",
-        medical_conditions="Hypertension",
-        allow_credit=True,
-        credit_limit=5000.0,
-        current_balance=0.0
-    )
-    db.add(demo_customer)
+    db.add(models.Customer(
+        id=str(uuid.uuid4()), organization_id=org.id, first_name="John", last_name="Smith",
+        email="john@example.com", phone="555-0100", allow_credit=True, credit_limit=5000.0, current_balance=0.0
+    ))
     
     db.commit()
-    print("Demo data created successfully!")
+    print("Demo data created!")
 
-# Create tables
 Base.metadata.create_all(bind=engine)
-
-# Create demo data
 db = next(get_db())
 try:
     create_demo_data(db)
-except Exception as e:
-    print(f"Error creating demo data: {e}")
+except:
     db.rollback()
 finally:
     db.close()
@@ -332,22 +226,8 @@ finally:
 # ==================== FASTAPI APP ====================
 app = FastAPI(title="PharmaSaaS")
 
-SECRET_KEY = os.getenv("SESSION_SECRET", secrets.token_urlsafe(32))
-
-app.add_middleware(
-    SessionMiddleware, 
-    secret_key=SECRET_KEY,
-    max_age=86400,
-    same_site="lax"
-)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+app.add_middleware(SessionMiddleware, secret_key=secrets.token_urlsafe(32), max_age=86400)
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
@@ -355,103 +235,20 @@ templates = Jinja2Templates(directory="templates")
 cohere_service = CohereService()
 tuma_service = TumaMpesaService()
 
-# ==================== AUTHENTICATION HELPER ====================
-def get_current_user(request: Request, db: Session):
+# ==================== SIMPLE AUTH HELPER ====================
+def get_user(request: Request, db: Session):
     user_id = request.session.get("user_id")
     if not user_id:
         return None
     return db.query(models.User).filter(models.User.id == user_id).first()
 
-# ==================== LANDING PAGE ====================
+# ==================== PUBLIC PAGES ====================
 @app.get("/", response_class=HTMLResponse)
-async def landing_page(request: Request):
+async def home(request: Request):
     if request.session.get("user_id"):
         return RedirectResponse(url="/dashboard", status_code=302)
     return templates.TemplateResponse("landing.html", {"request": request})
 
-# ==================== REGISTRATION ====================
-@app.get("/register", response_class=HTMLResponse)
-async def register_page(request: Request):
-    if request.session.get("user_id"):
-        return RedirectResponse(url="/dashboard", status_code=302)
-    return templates.TemplateResponse("register.html", {"request": request})
-
-@app.post("/register")
-async def register(
-    request: Request,
-    first_name: str = Form(...),
-    last_name: str = Form(...),
-    pharmacy_name: str = Form(...),
-    email: str = Form(...),
-    phone: str = Form(...),
-    password: str = Form(...),
-    confirm_password: str = Form(...),
-    db: Session = Depends(get_db)
-):
-    try:
-        password = password.strip()
-        email = email.strip().lower()
-        
-        if password != confirm_password:
-            return templates.TemplateResponse("register.html", {
-                "request": request, "error": "Passwords do not match"
-            })
-        
-        if len(password) < 6:
-            return templates.TemplateResponse("register.html", {
-                "request": request, "error": "Password must be at least 6 characters"
-            })
-        
-        if db.query(models.User).filter(models.User.email == email).first():
-            return templates.TemplateResponse("register.html", {
-                "request": request, "error": "Email already registered"
-            })
-        
-        if db.query(models.Organization).filter(models.Organization.name == pharmacy_name).first():
-            return templates.TemplateResponse("register.html", {
-                "request": request, "error": "Pharmacy name already taken"
-            })
-        
-        org = models.Organization(
-            id=str(uuid.uuid4()),
-            name=pharmacy_name,
-            slug=pharmacy_name.lower().replace(' ', '-'),
-            owner_email=email,
-            phone=phone,
-            address="",
-            subscription_plan="free",
-            is_active=True
-        )
-        db.add(org)
-        db.flush()
-        
-        user = models.User(
-            id=str(uuid.uuid4()),
-            organization_id=org.id,
-            username=email.split('@')[0][:100],
-            email=email,
-            password_hash=hash_password(password),
-            full_name=f"{first_name} {last_name}"[:255],
-            role=models.UserRoleEnum.admin,
-            is_active=True,
-            phone=phone[:50]
-        )
-        db.add(user)
-        db.commit()
-        
-        request.session["user_id"] = user.id
-        request.session["role"] = user.role.value
-        request.session["org_id"] = user.organization_id
-        
-        return RedirectResponse(url="/dashboard", status_code=302)
-        
-    except Exception as e:
-        db.rollback()
-        return templates.TemplateResponse("register.html", {
-            "request": request, "error": "Registration failed"
-        })
-
-# ==================== LOGIN/LOGOUT ====================
 @app.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
     if request.session.get("user_id"):
@@ -459,584 +256,329 @@ async def login_page(request: Request):
     return templates.TemplateResponse("login.html", {"request": request})
 
 @app.post("/login")
-async def login(
-    request: Request, 
-    email: str = Form(...), 
-    password: str = Form(...), 
-    db: Session = Depends(get_db)
-):
-    try:
-        email = email.strip().lower()
-        password = password.strip()
-        
-        user = db.query(models.User).filter(models.User.email == email).first()
-        
-        if not user or not verify_password(password, user.password_hash):
-            return templates.TemplateResponse("login.html", {
-                "request": request, "error": "Invalid email or password"
-            })
-        
-        if not user.is_active:
-            return templates.TemplateResponse("login.html", {
-                "request": request, "error": "Account is inactive"
-            })
-        
-        request.session["user_id"] = user.id
-        request.session["role"] = user.role.value
-        request.session["org_id"] = user.organization_id
-        
+async def login(request: Request, email: str = Form(...), password: str = Form(...), db: Session = Depends(get_db)):
+    user = db.query(models.User).filter(models.User.email == email.strip().lower()).first()
+    if not user or not verify_password(password, user.password_hash):
+        return templates.TemplateResponse("login.html", {"request": request, "error": "Invalid credentials"})
+    if not user.is_active:
+        return templates.TemplateResponse("login.html", {"request": request, "error": "Account inactive"})
+    
+    request.session["user_id"] = user.id
+    request.session["role"] = user.role.value
+    request.session["org_id"] = user.organization_id
+    return RedirectResponse(url="/dashboard", status_code=302)
+
+@app.get("/register", response_class=HTMLResponse)
+async def register_page(request: Request):
+    if request.session.get("user_id"):
         return RedirectResponse(url="/dashboard", status_code=302)
-        
-    except Exception as e:
-        return templates.TemplateResponse("login.html", {
-            "request": request, "error": "Login failed"
-        })
+    return templates.TemplateResponse("register.html", {"request": request})
+
+@app.post("/register")
+async def register(request: Request, first_name: str = Form(...), last_name: str = Form(...),
+                   pharmacy_name: str = Form(...), email: str = Form(...), phone: str = Form(...),
+                   password: str = Form(...), confirm_password: str = Form(...), db: Session = Depends(get_db)):
+    if password != confirm_password:
+        return templates.TemplateResponse("register.html", {"request": request, "error": "Passwords don't match"})
+    if len(password) < 6:
+        return templates.TemplateResponse("register.html", {"request": request, "error": "Password too short"})
+    
+    email = email.strip().lower()
+    if db.query(models.User).filter(models.User.email == email).first():
+        return templates.TemplateResponse("register.html", {"request": request, "error": "Email exists"})
+    if db.query(models.Organization).filter(models.Organization.name == pharmacy_name).first():
+        return templates.TemplateResponse("register.html", {"request": request, "error": "Pharmacy name taken"})
+    
+    org = models.Organization(id=str(uuid.uuid4()), name=pharmacy_name, slug=pharmacy_name.lower().replace(' ', '-'),
+                              owner_email=email, phone=phone, subscription_plan="free", is_active=True)
+    db.add(org)
+    db.flush()
+    
+    user = models.User(id=str(uuid.uuid4()), organization_id=org.id, username=email.split('@')[0], email=email,
+                       password_hash=hash_password(password), full_name=f"{first_name} {last_name}",
+                       role=models.UserRoleEnum.admin, is_active=True, phone=phone)
+    db.add(user)
+    db.commit()
+    
+    request.session["user_id"] = user.id
+    request.session["role"] = user.role.value
+    request.session["org_id"] = user.organization_id
+    return RedirectResponse(url="/dashboard", status_code=302)
 
 @app.get("/logout")
 async def logout(request: Request):
     request.session.clear()
     return RedirectResponse(url="/", status_code=302)
 
-# ==================== DASHBOARD ====================
+# ==================== PROTECTED PAGES (Manual Auth Check) ====================
 @app.get("/dashboard", response_class=HTMLResponse)
 async def dashboard(request: Request, db: Session = Depends(get_db)):
-    user = get_current_user(request, db)
+    user = get_user(request, db)
     if not user:
         return RedirectResponse(url="/login", status_code=302)
     
     org_id = request.session.get("org_id")
+    products = db.query(models.Drug).filter(models.Drug.organization_id == org_id).count()
+    customers = db.query(models.Customer).filter(models.Customer.organization_id == org_id).count()
+    sales = db.query(models.SalesOrder).filter(models.SalesOrder.organization_id == org_id).count()
+    credit = db.query(func.sum(models.Customer.current_balance)).filter(models.Customer.organization_id == org_id).scalar() or 0
     
-    total_products = db.query(models.Drug).filter(models.Drug.organization_id == org_id).count()
-    total_customers = db.query(models.Customer).filter(models.Customer.organization_id == org_id).count()
-    total_sales = db.query(models.SalesOrder).filter(models.SalesOrder.organization_id == org_id).count()
-    
-    pending_credit = db.query(func.sum(models.Customer.current_balance)).filter(
-        models.Customer.organization_id == org_id
-    ).scalar() or 0
-    
-    low_stock_items = []
+    low_stock = []
     for drug in db.query(models.Drug).filter(models.Drug.organization_id == org_id).all():
-        stock = db.query(func.sum(models.InventoryBatch.quantity_on_hand)).filter(
-            models.InventoryBatch.drug_id == drug.id
-        ).scalar() or 0
+        stock = db.query(func.sum(models.InventoryBatch.quantity_on_hand)).filter(models.InventoryBatch.drug_id == drug.id).scalar() or 0
         if stock < drug.reorder_level:
-            low_stock_items.append({"name": drug.name, "stock": stock, "reorder": drug.reorder_level})
+            low_stock.append({"name": drug.name, "stock": stock, "reorder": drug.reorder_level})
     
-    recent_sales = db.query(models.SalesOrder).filter(
-        models.SalesOrder.organization_id == org_id
-    ).order_by(models.SalesOrder.created_at.desc()).limit(5).all()
+    recent = db.query(models.SalesOrder).filter(models.SalesOrder.organization_id == org_id).order_by(models.SalesOrder.created_at.desc()).limit(5).all()
     
     return templates.TemplateResponse("dashboard.html", {
-        "request": request,
-        "user": user,
-        "total_products": total_products,
-        "total_customers": total_customers,
-        "total_sales": total_sales,
-        "pending_credit": float(pending_credit),
-        "low_stock_items": low_stock_items,
-        "recent_sales": recent_sales
+        "request": request, "user": user, "total_products": products, "total_customers": customers,
+        "total_sales": sales, "pending_credit": float(credit), "low_stock_items": low_stock, "recent_sales": recent
     })
 
-# ==================== INVENTORY ====================
 @app.get("/inventory", response_class=HTMLResponse)
 async def inventory_page(request: Request, db: Session = Depends(get_db)):
-    if not get_current_user(request, db):
+    if not get_user(request, db):
         return RedirectResponse(url="/login", status_code=302)
     return templates.TemplateResponse("inventory.html", {"request": request})
 
-@app.get("/api/inventory")
-async def get_inventory(
-    request: Request,
-    db: Session = Depends(get_db),
-    page: int = 1,
-    limit: int = 20,
-    search: str = ""
-):
-    if not get_current_user(request, db):
-        raise HTTPException(status_code=401, detail="Unauthorized")
-    
-    org_id = request.session.get("org_id")
-    offset = (page - 1) * limit
-    
-    query = db.query(models.Drug).filter(models.Drug.organization_id == org_id)
-    if search:
-        query = query.filter(or_(
-            models.Drug.name.ilike(f"%{search}%"),
-            models.Drug.barcode.ilike(f"%{search}%")
-        ))
-    
-    total = query.count()
-    drugs = query.offset(offset).limit(limit).all()
-    
-    result = []
-    for drug in drugs:
-        stock = db.query(func.sum(models.InventoryBatch.quantity_on_hand)).filter(
-            models.InventoryBatch.drug_id == drug.id
-        ).scalar() or 0
-        result.append({
-            "id": drug.id,
-            "name": drug.name,
-            "generic_name": drug.generic_name,
-            "price": float(drug.price),
-            "stock": int(stock),
-            "reorder_level": drug.reorder_level,
-            "barcode": drug.barcode
-        })
-    
-    return {"items": result, "total": total, "pages": (total + limit - 1) // limit}
-
-# ==================== POINT OF SALE ====================
 @app.get("/sales", response_class=HTMLResponse)
 async def sales_page(request: Request, db: Session = Depends(get_db)):
-    if not get_current_user(request, db):
+    if not get_user(request, db):
         return RedirectResponse(url="/login", status_code=302)
     return templates.TemplateResponse("pos.html", {"request": request})
 
-@app.get("/api/product_by_barcode")
-async def get_product_by_barcode(code: str, request: Request, db: Session = Depends(get_db)):
-    if not get_current_user(request, db):
-        raise HTTPException(status_code=401, detail="Unauthorized")
-    
-    org_id = request.session.get("org_id")
-    product = db.query(models.Drug).filter(
-        models.Drug.barcode == code,
-        models.Drug.organization_id == org_id
-    ).first()
-    
-    if not product:
-        raise HTTPException(status_code=404, detail="Product not found")
-    
-    stock = db.query(func.sum(models.InventoryBatch.quantity_on_hand)).filter(
-        models.InventoryBatch.drug_id == product.id
-    ).scalar() or 0
-    
-    return {
-        "id": product.id,
-        "name": product.name,
-        "price": float(product.price),
-        "barcode": product.barcode,
-        "stock": int(stock)
-    }
-
-@app.get("/api/products/search")
-async def search_products(request: Request, q: str, db: Session = Depends(get_db)):
-    if not get_current_user(request, db):
-        raise HTTPException(status_code=401, detail="Unauthorized")
-    
-    org_id = request.session.get("org_id")
-    products = db.query(models.Drug).filter(
-        models.Drug.organization_id == org_id,
-        or_(
-            models.Drug.name.ilike(f"%{q}%"),
-            models.Drug.barcode.ilike(f"%{q}%")
-        )
-    ).limit(20).all()
-    
-    result = []
-    for p in products:
-        stock = db.query(func.sum(models.InventoryBatch.quantity_on_hand)).filter(
-            models.InventoryBatch.drug_id == p.id
-        ).scalar() or 0
-        result.append({
-            "id": p.id,
-            "name": p.name,
-            "price": float(p.price),
-            "stock": int(stock),
-            "barcode": p.barcode
-        })
-    return result
-
-@app.post("/api/sales")
-async def create_sale(request: Request, db: Session = Depends(get_db)):
-    user = get_current_user(request, db)
-    if not user:
-        raise HTTPException(status_code=401, detail="Unauthorized")
-    
-    data = await request.json()
-    org_id = request.session.get("org_id")
-    
-    try:
-        sale_number = f"SALE-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
-        
-        sale = models.SalesOrder(
-            id=str(uuid.uuid4()),
-            organization_id=org_id,
-            customer_id=data.get("customerId"),
-            sale_number=sale_number,
-            subtotal=data["subtotal"],
-            tax=data.get("tax", 0),
-            discount=data.get("discount", 0),
-            total=data["total"],
-            payment_method=models.PaymentMethodEnum(data["paymentMethod"]),
-            amount_paid=data.get("amountPaid", data["total"]),
-            balance=data.get("balance", 0),
-            created_by=user.id
-        )
-        db.add(sale)
-        db.flush()
-        
-        for item in data["lineItems"]:
-            line_item = models.SalesLineItem(
-                id=str(uuid.uuid4()),
-                sales_order_id=sale.id,
-                drug_id=item["productId"],
-                quantity=item["quantity"],
-                unit_price=item["unitPrice"],
-                line_total=item["lineTotal"]
-            )
-            db.add(line_item)
-            
-            remaining = item["quantity"]
-            batches = db.query(models.InventoryBatch).filter(
-                models.InventoryBatch.drug_id == item["productId"],
-                models.InventoryBatch.quantity_on_hand > 0
-            ).order_by(models.InventoryBatch.expiry_date).all()
-            
-            for batch in batches:
-                if remaining <= 0:
-                    break
-                take = min(batch.quantity_on_hand, remaining)
-                batch.quantity_on_hand -= take
-                remaining -= take
-        
-        if data["paymentMethod"] == "credit" and data.get("customerId"):
-            customer = db.query(models.Customer).filter(models.Customer.id == data["customerId"]).first()
-            if customer:
-                customer.current_balance += data.get("balance", 0)
-        
-        db.commit()
-        return {"success": True, "sale_id": sale.id, "sale_number": sale.sale_number}
-        
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=400, detail=str(e))
-
-# ==================== CUSTOMERS ====================
 @app.get("/customers", response_class=HTMLResponse)
 async def customers_page(request: Request, db: Session = Depends(get_db)):
-    if not get_current_user(request, db):
+    if not get_user(request, db):
         return RedirectResponse(url="/login", status_code=302)
     return templates.TemplateResponse("customers.html", {"request": request})
 
-@app.get("/api/customers")
-async def get_customers(
-    request: Request,
-    db: Session = Depends(get_db),
-    page: int = 1,
-    limit: int = 20,
-    search: str = ""
-):
-    if not get_current_user(request, db):
-        raise HTTPException(status_code=401, detail="Unauthorized")
-    
-    org_id = request.session.get("org_id")
-    offset = (page - 1) * limit
-    
-    query = db.query(models.Customer).filter(models.Customer.organization_id == org_id)
-    if search:
-        query = query.filter(or_(
-            models.Customer.first_name.ilike(f"%{search}%"),
-            models.Customer.last_name.ilike(f"%{search}%"),
-            models.Customer.email.ilike(f"%{search}%")
-        ))
-    
-    total = query.count()
-    customers = query.offset(offset).limit(limit).all()
-    
-    result = []
-    for c in customers:
-        result.append({
-            "id": c.id,
-            "first_name": c.first_name,
-            "last_name": c.last_name,
-            "full_name": c.full_name,
-            "email": c.email,
-            "phone": c.phone,
-            "address": c.address,
-            "allow_credit": c.allow_credit,
-            "credit_limit": float(c.credit_limit) if c.credit_limit else 0,
-            "current_balance": float(c.current_balance) if c.current_balance else 0
-        })
-    
-    return {"items": result, "total": total, "pages": (total + limit - 1) // limit}
-
-@app.post("/api/customers")
-async def add_customer(request: Request, db: Session = Depends(get_db)):
-    if not get_current_user(request, db):
-        raise HTTPException(status_code=401, detail="Unauthorized")
-    
-    data = await request.json()
-    org_id = request.session.get("org_id")
-    
-    try:
-        customer = models.Customer(
-            id=str(uuid.uuid4()),
-            organization_id=org_id,
-            first_name=data["first_name"],
-            last_name=data["last_name"],
-            email=data.get("email", ""),
-            phone=data.get("phone", ""),
-            address=data.get("address", ""),
-            allow_credit=data.get("allow_credit", False),
-            credit_limit=data.get("credit_limit", 0),
-            current_balance=0
-        )
-        db.add(customer)
-        db.commit()
-        return {"success": True, "id": customer.id}
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=400, detail=str(e))
-
-@app.post("/api/customers/{customer_id}/payment")
-async def add_customer_payment(customer_id: str, request: Request, db: Session = Depends(get_db)):
-    if not get_current_user(request, db):
-        raise HTTPException(status_code=401, detail="Unauthorized")
-    
-    data = await request.json()
-    org_id = request.session.get("org_id")
-    
-    customer = db.query(models.Customer).filter(
-        models.Customer.id == customer_id,
-        models.Customer.organization_id == org_id
-    ).first()
-    
-    if not customer:
-        raise HTTPException(status_code=404, detail="Customer not found")
-    
-    try:
-        amount = data.get("amount", 0)
-        if amount <= 0:
-            raise HTTPException(status_code=400, detail="Invalid amount")
-        
-        customer.current_balance -= amount
-        db.commit()
-        return {"success": True, "new_balance": float(customer.current_balance)}
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=400, detail=str(e))
-
-# ==================== STAFF ====================
 @app.get("/staff", response_class=HTMLResponse)
 async def staff_page(request: Request, db: Session = Depends(get_db)):
-    user = get_current_user(request, db)
+    user = get_user(request, db)
     if not user or user.role.value != "admin":
         return RedirectResponse(url="/dashboard", status_code=302)
     return templates.TemplateResponse("staff.html", {"request": request})
 
-@app.get("/api/staff")
-async def get_staff(request: Request, db: Session = Depends(get_db)):
-    user = get_current_user(request, db)
-    if not user or user.role.value != "admin":
-        raise HTTPException(status_code=403, detail="Forbidden")
-    
-    org_id = request.session.get("org_id")
-    staff = db.query(models.User).filter(
-        models.User.organization_id == org_id,
-        models.User.role != models.UserRoleEnum.admin
-    ).all()
-    
-    return [{
-        "id": s.id,
-        "username": s.username,
-        "email": s.email,
-        "full_name": s.full_name,
-        "role": s.role.value,
-        "is_active": s.is_active,
-        "phone": s.phone
-    } for s in staff]
-
-@app.post("/api/staff")
-async def add_staff(request: Request, db: Session = Depends(get_db)):
-    user = get_current_user(request, db)
-    if not user or user.role.value != "admin":
-        raise HTTPException(status_code=403, detail="Forbidden")
-    
-    data = await request.json()
-    org_id = request.session.get("org_id")
-    
-    try:
-        if db.query(models.User).filter(models.User.email == data["email"]).first():
-            raise HTTPException(status_code=400, detail="Email exists")
-        
-        staff = models.User(
-            id=str(uuid.uuid4()),
-            organization_id=org_id,
-            username=data["username"],
-            email=data["email"],
-            password_hash=hash_password(data["password"]),
-            full_name=data["full_name"],
-            role=models.UserRoleEnum(data["role"]),
-            is_active=True,
-            phone=data.get("phone", "")
-        )
-        db.add(staff)
-        db.commit()
-        return {"success": True, "id": staff.id}
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=400, detail=str(e))
-
-@app.delete("/api/staff/{staff_id}")
-async def delete_staff(staff_id: str, request: Request, db: Session = Depends(get_db)):
-    user = get_current_user(request, db)
-    if not user or user.role.value != "admin":
-        raise HTTPException(status_code=403, detail="Forbidden")
-    
-    if staff_id == user.id:
-        raise HTTPException(status_code=400, detail="Cannot delete yourself")
-    
-    staff = db.query(models.User).filter(models.User.id == staff_id).first()
-    if not staff:
-        raise HTTPException(status_code=404, detail="Not found")
-    
-    try:
-        db.delete(staff)
-        db.commit()
-        return {"success": True}
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=400, detail=str(e))
-
-# ==================== AI CHAT ====================
 @app.get("/ai-chat", response_class=HTMLResponse)
 async def ai_chat_page(request: Request, db: Session = Depends(get_db)):
-    if not get_current_user(request, db):
+    if not get_user(request, db):
         return RedirectResponse(url="/login", status_code=302)
     return templates.TemplateResponse("ai_chat.html", {"request": request})
 
+# ==================== API ENDPOINTS ====================
+@app.get("/api/inventory")
+async def get_inventory(request: Request, db: Session = Depends(get_db), page: int = 1, limit: int = 20, search: str = ""):
+    if not get_user(request, db):
+        raise HTTPException(401, "Unauthorized")
+    org_id = request.session.get("org_id")
+    query = db.query(models.Drug).filter(models.Drug.organization_id == org_id)
+    if search:
+        query = query.filter(or_(models.Drug.name.ilike(f"%{search}%"), models.Drug.barcode.ilike(f"%{search}%")))
+    
+    total = query.count()
+    drugs = query.offset((page-1)*limit).limit(limit).all()
+    items = []
+    for d in drugs:
+        stock = db.query(func.sum(models.InventoryBatch.quantity_on_hand)).filter(models.InventoryBatch.drug_id == d.id).scalar() or 0
+        items.append({"id": d.id, "name": d.name, "generic_name": d.generic_name, "price": float(d.price), "stock": int(stock), "reorder_level": d.reorder_level, "barcode": d.barcode})
+    return {"items": items, "total": total, "pages": (total + limit - 1) // limit}
+
+@app.get("/api/product_by_barcode")
+async def product_by_barcode(code: str, request: Request, db: Session = Depends(get_db)):
+    if not get_user(request, db):
+        raise HTTPException(401, "Unauthorized")
+    product = db.query(models.Drug).filter(models.Drug.barcode == code, models.Drug.organization_id == request.session.get("org_id")).first()
+    if not product:
+        raise HTTPException(404, "Not found")
+    stock = db.query(func.sum(models.InventoryBatch.quantity_on_hand)).filter(models.InventoryBatch.drug_id == product.id).scalar() or 0
+    return {"id": product.id, "name": product.name, "price": float(product.price), "barcode": product.barcode, "stock": int(stock)}
+
+@app.get("/api/products/search")
+async def search_products(request: Request, q: str, db: Session = Depends(get_db)):
+    if not get_user(request, db):
+        raise HTTPException(401, "Unauthorized")
+    products = db.query(models.Drug).filter(models.Drug.organization_id == request.session.get("org_id"),
+                                            or_(models.Drug.name.ilike(f"%{q}%"), models.Drug.barcode.ilike(f"%{q}%"))).limit(20).all()
+    result = []
+    for p in products:
+        stock = db.query(func.sum(models.InventoryBatch.quantity_on_hand)).filter(models.InventoryBatch.drug_id == p.id).scalar() or 0
+        result.append({"id": p.id, "name": p.name, "price": float(p.price), "stock": int(stock), "barcode": p.barcode})
+    return result
+
+@app.post("/api/sales")
+async def create_sale(request: Request, db: Session = Depends(get_db)):
+    user = get_user(request, db)
+    if not user:
+        raise HTTPException(401, "Unauthorized")
+    data = await request.json()
+    org_id = request.session.get("org_id")
+    
+    sale = models.SalesOrder(id=str(uuid.uuid4()), organization_id=org_id, customer_id=data.get("customerId"),
+                              sale_number=f"SALE-{datetime.now().strftime('%Y%m%d-%H%M%S')}", subtotal=data["subtotal"],
+                              tax=data.get("tax", 0), discount=data.get("discount", 0), total=data["total"],
+                              payment_method=models.PaymentMethodEnum(data["paymentMethod"]),
+                              amount_paid=data.get("amountPaid", data["total"]), balance=data.get("balance", 0), created_by=user.id)
+    db.add(sale)
+    db.flush()
+    
+    for item in data["lineItems"]:
+        db.add(models.SalesLineItem(id=str(uuid.uuid4()), sales_order_id=sale.id, drug_id=item["productId"],
+                                     quantity=item["quantity"], unit_price=item["unitPrice"], line_total=item["lineTotal"]))
+        remaining = item["quantity"]
+        for batch in db.query(models.InventoryBatch).filter(models.InventoryBatch.drug_id == item["productId"], models.InventoryBatch.quantity_on_hand > 0).order_by(models.InventoryBatch.expiry_date).all():
+            if remaining <= 0: break
+            take = min(batch.quantity_on_hand, remaining)
+            batch.quantity_on_hand -= take
+            remaining -= take
+    
+    if data["paymentMethod"] == "credit" and data.get("customerId"):
+        customer = db.query(models.Customer).filter(models.Customer.id == data["customerId"]).first()
+        if customer:
+            customer.current_balance += data.get("balance", 0)
+    
+    db.commit()
+    return {"success": True, "sale_id": sale.id, "sale_number": sale.sale_number}
+
+@app.get("/api/customers")
+async def get_customers(request: Request, db: Session = Depends(get_db), page: int = 1, limit: int = 20, search: str = ""):
+    if not get_user(request, db):
+        raise HTTPException(401, "Unauthorized")
+    org_id = request.session.get("org_id")
+    query = db.query(models.Customer).filter(models.Customer.organization_id == org_id)
+    if search:
+        query = query.filter(or_(models.Customer.first_name.ilike(f"%{search}%"), models.Customer.last_name.ilike(f"%{search}%"), models.Customer.email.ilike(f"%{search}%")))
+    
+    total = query.count()
+    customers = query.offset((page-1)*limit).limit(limit).all()
+    items = [{"id": c.id, "full_name": c.full_name, "email": c.email, "phone": c.phone, "current_balance": float(c.current_balance)} for c in customers]
+    return {"items": items, "total": total, "pages": (total + limit - 1) // limit}
+
+@app.post("/api/customers")
+async def add_customer(request: Request, db: Session = Depends(get_db)):
+    if not get_user(request, db):
+        raise HTTPException(401, "Unauthorized")
+    data = await request.json()
+    customer = models.Customer(id=str(uuid.uuid4()), organization_id=request.session.get("org_id"),
+                                first_name=data["first_name"], last_name=data["last_name"], email=data.get("email", ""),
+                                phone=data.get("phone", ""), allow_credit=data.get("allow_credit", False),
+                                credit_limit=data.get("credit_limit", 0), current_balance=0)
+    db.add(customer)
+    db.commit()
+    return {"success": True, "id": customer.id}
+
+@app.post("/api/customers/{customer_id}/payment")
+async def add_payment(customer_id: str, request: Request, db: Session = Depends(get_db)):
+    if not get_user(request, db):
+        raise HTTPException(401, "Unauthorized")
+    data = await request.json()
+    customer = db.query(models.Customer).filter(models.Customer.id == customer_id, models.Customer.organization_id == request.session.get("org_id")).first()
+    if not customer:
+        raise HTTPException(404, "Not found")
+    customer.current_balance -= data.get("amount", 0)
+    db.commit()
+    return {"success": True, "new_balance": float(customer.current_balance)}
+
+@app.get("/api/staff")
+async def get_staff(request: Request, db: Session = Depends(get_db)):
+    user = get_user(request, db)
+    if not user or user.role.value != "admin":
+        raise HTTPException(403, "Forbidden")
+    staff = db.query(models.User).filter(models.User.organization_id == request.session.get("org_id"), models.User.role != models.UserRoleEnum.admin).all()
+    return [{"id": s.id, "full_name": s.full_name, "email": s.email, "role": s.role.value, "is_active": s.is_active} for s in staff]
+
+@app.post("/api/staff")
+async def add_staff(request: Request, db: Session = Depends(get_db)):
+    user = get_user(request, db)
+    if not user or user.role.value != "admin":
+        raise HTTPException(403, "Forbidden")
+    data = await request.json()
+    if db.query(models.User).filter(models.User.email == data["email"]).first():
+        raise HTTPException(400, "Email exists")
+    staff = models.User(id=str(uuid.uuid4()), organization_id=request.session.get("org_id"), username=data["username"],
+                        email=data["email"], password_hash=hash_password(data["password"]), full_name=data["full_name"],
+                        role=models.UserRoleEnum(data["role"]), is_active=True, phone=data.get("phone", ""))
+    db.add(staff)
+    db.commit()
+    return {"success": True, "id": staff.id}
+
+@app.delete("/api/staff/{staff_id}")
+async def delete_staff(staff_id: str, request: Request, db: Session = Depends(get_db)):
+    user = get_user(request, db)
+    if not user or user.role.value != "admin" or staff_id == user.id:
+        raise HTTPException(403, "Forbidden")
+    staff = db.query(models.User).filter(models.User.id == staff_id).first()
+    if not staff:
+        raise HTTPException(404, "Not found")
+    db.delete(staff)
+    db.commit()
+    return {"success": True}
+
 @app.post("/api/ai/chat")
 async def ai_chat(request: Request, db: Session = Depends(get_db)):
-    user = get_current_user(request, db)
+    user = get_user(request, db)
     if not user:
-        raise HTTPException(status_code=401, detail="Unauthorized")
-    
+        raise HTTPException(401, "Unauthorized")
     data = await request.json()
     message = data.get("message")
-    session_id = data.get("sessionId")
-    
     if not message:
-        raise HTTPException(status_code=400, detail="Message required")
+        raise HTTPException(400, "Message required")
     
+    session_id = data.get("sessionId")
     if not session_id:
-        chat_session = models.AIChatSession(
-            id=str(uuid.uuid4()),
-            user_id=user.id,
-            title=message[:50]
-        )
-        db.add(chat_session)
+        session = models.AIChatSession(id=str(uuid.uuid4()), user_id=user.id, title=message[:50])
+        db.add(session)
         db.flush()
-        session_id = chat_session.id
+        session_id = session.id
     
-    user_msg = models.AIChatMessage(
-        id=str(uuid.uuid4()),
-        session_id=session_id,
-        role="user",
-        content=message
-    )
-    db.add(user_msg)
+    db.add(models.AIChatMessage(id=str(uuid.uuid4()), session_id=session_id, role="user", content=message))
     db.flush()
     
     response = await cohere_service.get_drug_information(message)
-    
-    ai_msg = models.AIChatMessage(
-        id=str(uuid.uuid4()),
-        session_id=session_id,
-        role="assistant",
-        content=response
-    )
-    db.add(ai_msg)
+    db.add(models.AIChatMessage(id=str(uuid.uuid4()), session_id=session_id, role="assistant", content=response))
     db.commit()
     
     return {"sessionId": session_id, "response": response}
 
-# ==================== MPESA PAYMENTS ====================
 @app.post("/api/payment/mpesa/initiate")
-async def initiate_mpesa_payment(request: Request, db: Session = Depends(get_db)):
-    user = get_current_user(request, db)
+async def initiate_mpesa(request: Request, db: Session = Depends(get_db)):
+    user = get_user(request, db)
     if not user:
-        raise HTTPException(status_code=401, detail="Unauthorized")
-    
+        raise HTTPException(401, "Unauthorized")
     data = await request.json()
-    sale_id = data.get("sale_id")
-    phone = data.get("phone")
-    amount = data.get("amount")
-    
-    sale = db.query(models.SalesOrder).filter(models.SalesOrder.id == sale_id).first()
+    sale = db.query(models.SalesOrder).filter(models.SalesOrder.id == data["sale_id"]).first()
     if not sale:
-        raise HTTPException(status_code=404, detail="Sale not found")
+        raise HTTPException(404, "Sale not found")
     
-    result = await tuma_service.initiate_payment(amount, phone, sale.sale_number)
-    
+    result = await tuma_service.initiate_payment(data["amount"], data["phone"], sale.sale_number)
     if result["success"]:
-        payment = models.Payment(
-            id=str(uuid.uuid4()),
-            organization_id=sale.organization_id,
-            sale_id=sale.id,
-            amount=amount,
-            payment_method=models.PaymentMethodEnum.mpesa,
-            reference=result["reference"],
-            status="pending",
-            transaction_id=result["payment_id"],
-            created_by=user.id
-        )
+        payment = models.Payment(id=str(uuid.uuid4()), organization_id=sale.organization_id, sale_id=sale.id, amount=data["amount"],
+                                  payment_method=models.PaymentMethodEnum.mpesa, reference=result["reference"], status="pending",
+                                  transaction_id=result["payment_id"], created_by=user.id)
         db.add(payment)
         db.commit()
-        return result
-    else:
-        raise HTTPException(status_code=400, detail=result.get("error", "Payment failed"))
+    return result
 
 @app.get("/api/payment/status/{payment_id}")
-async def check_payment_status(payment_id: str, request: Request):
-    if not get_current_user(request, next(get_db())):
-        raise HTTPException(status_code=401, detail="Unauthorized")
-    
+async def payment_status(payment_id: str, request: Request):
     return await tuma_service.check_payment_status(payment_id)
 
-# ==================== REPORTS ====================
-@app.get("/api/reports/sales")
-async def get_sales_report(request: Request, db: Session = Depends(get_db)):
-    if not get_current_user(request, db):
-        raise HTTPException(status_code=401, detail="Unauthorized")
-    
-    org_id = request.session.get("org_id")
-    sales = db.query(models.SalesOrder).filter(models.SalesOrder.organization_id == org_id).all()
-    
-    total = sum(s.total for s in sales)
-    return {
-        "total_sales": float(total),
-        "transaction_count": len(sales),
-        "sales": [{"sale_number": s.sale_number, "date": s.created_at.isoformat(), "total": float(s.total)} for s in sales[-50:]]
-    }
-
-@app.get("/api/reports/inventory")
-async def get_inventory_report(request: Request, db: Session = Depends(get_db)):
-    if not get_current_user(request, db):
-        raise HTTPException(status_code=401, detail="Unauthorized")
-    
-    org_id = request.session.get("org_id")
-    drugs = db.query(models.Drug).filter(models.Drug.organization_id == org_id).all()
-    
-    report = []
-    for drug in drugs:
-        stock = db.query(func.sum(models.InventoryBatch.quantity_on_hand)).filter(
-            models.InventoryBatch.drug_id == drug.id
-        ).scalar() or 0
-        report.append({
-            "name": drug.name,
-            "stock": int(stock),
-            "price": float(drug.price),
-            "total_value": float(stock * drug.price)
-        })
-    
-    return {"items": report, "total_items": len(report)}
-
-# ==================== ERROR HANDLER ====================
-@app.exception_handler(HTTPException)
-async def http_exception_handler(request: Request, exc: HTTPException):
-    if exc.status_code == 401:
-        return RedirectResponse(url="/login", status_code=302)
-    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+@app.post("/api/payment/callback")
+async def payment_callback(request: Request):
+    data = await request.json()
+    db = next(get_db())
+    payment = db.query(models.Payment).filter(models.Payment.transaction_id == data.get("payment_id")).first()
+    if payment:
+        payment.status = data.get("status")
+        if data.get("status") == "completed":
+            sale = db.query(models.SalesOrder).filter(models.SalesOrder.id == payment.sale_id).first()
+            if sale:
+                sale.amount_paid += payment.amount
+                sale.balance = sale.total - sale.amount_paid
+        db.commit()
+    db.close()
+    return {"status": "received"}
 
 if __name__ == "__main__":
     import uvicorn
