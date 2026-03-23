@@ -227,7 +227,7 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, 
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# SIMPLE TEMPLATE SETUP - THIS FIXES THE ERROR
+# Templates for pages that need them (dashboard, inventory, etc.)
 templates = Jinja2Templates(directory="templates")
 
 cohere_service = CohereService()
@@ -266,12 +266,145 @@ def create_reminder(db: Session, medication, reminder_type, message):
     db.commit()
     return reminder
 
-# ==================== LANDING PAGE ====================
+# ==================== LANDING PAGE (DIRECT HTML) ====================
+LANDING_HTML = """<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PharmaSaaS - Complete Pharmacy Management System</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .gradient-bg { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+        .card-hover { transition: transform 0.3s ease, box-shadow 0.3s ease; }
+        .card-hover:hover { transform: translateY(-5px); box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1); }
+        .pricing-card { transition: transform 0.3s ease; }
+        .pricing-card:hover { transform: translateY(-10px); }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <!-- Hero Section -->
+    <div class="gradient-bg text-white overflow-hidden">
+        <div class="container mx-auto px-6 py-16">
+            <div class="flex flex-col lg:flex-row items-center justify-between">
+                <div class="lg:w-1/2 text-center lg:text-left">
+                    <div class="flex justify-center lg:justify-start mb-4"><i class="fas fa-hospital-user text-5xl"></i></div>
+                    <h1 class="text-4xl md:text-5xl font-bold mb-4">PharmaSaaS</h1>
+                    <p class="text-xl mb-6 opacity-95">Complete Pharmacy Management System for Modern Pharmacies</p>
+                    <div class="flex gap-4 justify-center lg:justify-start flex-wrap">
+                        <a href="/register" class="bg-white text-purple-600 px-8 py-3 rounded-lg font-semibold hover:bg-gray-100 transition inline-flex items-center"><i class="fas fa-rocket mr-2"></i> Get Started Free</a>
+                        <a href="/login" class="border-2 border-white text-white px-8 py-3 rounded-lg font-semibold hover:bg-white hover:text-purple-600 transition inline-flex items-center"><i class="fas fa-sign-in-alt mr-2"></i> Login</a>
+                    </div>
+                    <div class="mt-8 flex gap-6 justify-center lg:justify-start">
+                        <div class="text-center"><div class="text-2xl font-bold">500+</div><div class="text-sm opacity-80">Happy Pharmacies</div></div>
+                        <div class="text-center"><div class="text-2xl font-bold">10k+</div><div class="text-sm opacity-80">Daily Transactions</div></div>
+                        <div class="text-center"><div class="text-2xl font-bold">24/7</div><div class="text-sm opacity-80">Support</div></div>
+                    </div>
+                </div>
+                <div class="lg:w-1/2 mt-12 lg:mt-0">
+                    <div class="bg-white rounded-2xl shadow-2xl p-6">
+                        <div class="flex items-center justify-between mb-4">
+                            <div class="flex space-x-2"><div class="w-3 h-3 bg-red-500 rounded-full"></div><div class="w-3 h-3 bg-yellow-500 rounded-full"></div><div class="w-3 h-3 bg-green-500 rounded-full"></div></div>
+                            <i class="fas fa-qrcode text-gray-400"></i>
+                        </div>
+                        <div class="bg-gray-100 rounded-lg p-4 mb-4">
+                            <div class="flex items-center justify-between mb-2"><span class="font-mono text-sm">Scan Barcode:</span><i class="fas fa-camera text-purple-600"></i></div>
+                            <div class="bg-white rounded p-2 font-mono text-sm">123456789012</div>
+                        </div>
+                        <div class="space-y-2">
+                            <div class="flex justify-between"><span>Paracetamol 500mg</span><span class="font-bold">Ksh 50.00</span></div>
+                            <div class="flex justify-between"><span>Amoxicillin 500mg</span><span class="font-bold">Ksh 150.00</span></div>
+                            <div class="border-t pt-2 mt-2"><div class="flex justify-between font-bold"><span>Total:</span><span class="text-purple-600">Ksh 200.00</span></div></div>
+                        </div>
+                        <button class="w-full mt-4 bg-purple-600 text-white py-2 rounded-lg font-semibold">Complete Sale</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Features Section -->
+    <div class="container mx-auto px-6 py-20">
+        <div class="text-center mb-12">
+            <h2 class="text-3xl md:text-4xl font-bold text-gray-800 mb-4">Powerful Features</h2>
+            <p class="text-xl text-gray-600 max-w-2xl mx-auto">Everything you need to run your pharmacy efficiently</p>
+        </div>
+        <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+            <div class="bg-white rounded-xl shadow-lg p-6 card-hover"><div class="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mb-4"><i class="fas fa-qrcode text-2xl text-purple-600"></i></div><h3 class="text-xl font-semibold mb-2">Barcode Scanning</h3><p class="text-gray-600">Use your phone camera to scan product barcodes for instant inventory management.</p></div>
+            <div class="bg-white rounded-xl shadow-lg p-6 card-hover"><div class="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mb-4"><i class="fas fa-users text-2xl text-purple-600"></i></div><h3 class="text-xl font-semibold mb-2">Multi-User Support</h3><p class="text-gray-600">Admin and Pharmacist roles with custom permissions.</p></div>
+            <div class="bg-white rounded-xl shadow-lg p-6 card-hover"><div class="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mb-4"><i class="fas fa-credit-card text-2xl text-purple-600"></i></div><h3 class="text-xl font-semibold mb-2">Credit Management</h3><p class="text-gray-600">Manage clients with credit accounts and payment tracking.</p></div>
+            <div class="bg-white rounded-xl shadow-lg p-6 card-hover"><div class="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mb-4"><i class="fas fa-robot text-2xl text-purple-600"></i></div><h3 class="text-xl font-semibold mb-2">AI Assistant</h3><p class="text-gray-600">Built-in AI chat for drug information and dosage queries.</p></div>
+            <div class="bg-white rounded-xl shadow-lg p-6 card-hover"><div class="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mb-4"><i class="fas fa-chart-line text-2xl text-purple-600"></i></div><h3 class="text-xl font-semibold mb-2">Analytics Dashboard</h3><p class="text-gray-600">Real-time sales analytics and inventory alerts.</p></div>
+            <div class="bg-white rounded-xl shadow-lg p-6 card-hover"><div class="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mb-4"><i class="fas fa-shopping-cart text-2xl text-purple-600"></i></div><h3 class="text-xl font-semibold mb-2">Point of Sale</h3><p class="text-gray-600">Fast POS with barcode scanning and M-Pesa integration.</p></div>
+        </div>
+    </div>
+
+    <!-- Additional Features Banner -->
+    <div class="gradient-bg text-white py-16">
+        <div class="container mx-auto px-6">
+            <div class="grid md:grid-cols-4 gap-8 text-center">
+                <div><i class="fas fa-mobile-alt text-3xl mb-3"></i><h4 class="font-bold mb-1">Mobile Ready</h4><p class="text-sm opacity-90">Access from any device</p></div>
+                <div><i class="fas fa-shield-alt text-3xl mb-3"></i><h4 class="font-bold mb-1">Secure</h4><p class="text-sm opacity-90">Bank-grade encryption</p></div>
+                <div><i class="fas fa-clock text-3xl mb-3"></i><h4 class="font-bold mb-1">24/7 Support</h4><p class="text-sm opacity-90">Always here to help</p></div>
+                <div><i class="fas fa-chart-bar text-3xl mb-3"></i><h4 class="font-bold mb-1">Reports</h4><p class="text-sm opacity-90">Detailed analytics</p></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pricing Section -->
+    <div class="bg-gray-100 py-20">
+        <div class="container mx-auto px-6">
+            <div class="text-center mb-12"><h2 class="text-3xl md:text-4xl font-bold text-gray-800 mb-4">Simple Pricing</h2><p class="text-xl text-gray-600">Choose the plan that fits your pharmacy's needs</p></div>
+            <div class="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
+                <div class="bg-white rounded-2xl shadow-lg p-8 pricing-card text-center"><i class="fas fa-store text-3xl text-purple-600 mb-4"></i><h3 class="text-2xl font-bold mb-2">Starter</h3><div class="text-4xl font-bold text-purple-600 mb-4">Kes 180 <span class="text-lg text-gray-500">/month</span></div><ul class="space-y-2 mb-8 text-left"><li class="flex items-center"><i class="fas fa-check-circle text-green-500 mr-3"></i>1 Admin + 2 Pharmacists</li><li class="flex items-center"><i class="fas fa-check-circle text-green-500 mr-3"></i>Up to 500 products</li><li class="flex items-center"><i class="fas fa-check-circle text-green-500 mr-3"></i>Basic reporting</li></ul><a href="/register" class="block bg-gray-200 text-gray-700 py-3 rounded-lg font-semibold hover:bg-gray-300">Get Started</a></div>
+                <div class="bg-white rounded-2xl shadow-2xl p-8 pricing-card transform scale-105 border-2 border-purple-500 relative text-center"><div class="absolute -top-4 left-1/2 transform -translate-x-1/2 bg-purple-600 text-white px-4 py-1 rounded-full text-sm font-bold">Most Popular</div><i class="fas fa-chart-line text-3xl text-purple-600 mb-4"></i><h3 class="text-2xl font-bold mb-2">Professional</h3><div class="text-4xl font-bold text-purple-600 mb-4">Kes 279 <span class="text-lg text-gray-500">/month</span></div><ul class="space-y-2 mb-8 text-left"><li class="flex items-center"><i class="fas fa-check-circle text-green-500 mr-3"></i>Unlimited users</li><li class="flex items-center"><i class="fas fa-check-circle text-green-500 mr-3"></i>Unlimited products</li><li class="flex items-center"><i class="fas fa-check-circle text-green-500 mr-3"></i>AI Assistant</li><li class="flex items-center"><i class="fas fa-check-circle text-green-500 mr-3"></i>M-Pesa Integration</li></ul><a href="/register" class="block bg-purple-600 text-white py-3 rounded-lg font-semibold hover:bg-purple-700">Get Started</a></div>
+                <div class="bg-white rounded-2xl shadow-lg p-8 pricing-card text-center"><i class="fas fa-building text-3xl text-purple-600 mb-4"></i><h3 class="text-2xl font-bold mb-2">Enterprise</h3><div class="text-4xl font-bold text-purple-600 mb-4">Kes 499 <span class="text-lg text-gray-500">/month</span></div><ul class="space-y-2 mb-8 text-left"><li class="flex items-center"><i class="fas fa-check-circle text-green-500 mr-3"></i>Multiple locations</li><li class="flex items-center"><i class="fas fa-check-circle text-green-500 mr-3"></i>Custom integrations</li><li class="flex items-center"><i class="fas fa-check-circle text-green-500 mr-3"></i>24/7 phone support</li></ul><a href="/register" class="block bg-gray-200 text-gray-700 py-3 rounded-lg font-semibold hover:bg-gray-300">Contact Sales</a></div>
+            </div>
+            <div class="text-center mt-12"><p class="text-gray-600">All plans include 14-day free trial. No credit card required.</p><a href="/register" class="inline-block mt-4 text-purple-600 font-semibold hover:underline">Start your free trial →</a></div>
+        </div>
+    </div>
+
+    <!-- Testimonials Section -->
+    <div class="container mx-auto px-6 py-20">
+        <div class="text-center mb-12"><h2 class="text-3xl md:text-4xl font-bold text-gray-800 mb-4">Trusted by Pharmacies</h2><p class="text-xl text-gray-600">Join hundreds of satisfied pharmacy owners</p></div>
+        <div class="grid md:grid-cols-3 gap-8">
+            <div class="bg-white rounded-xl shadow-lg p-6"><div class="flex items-center mb-4"><i class="fas fa-star text-yellow-400"></i><i class="fas fa-star text-yellow-400"></i><i class="fas fa-star text-yellow-400"></i><i class="fas fa-star text-yellow-400"></i><i class="fas fa-star text-yellow-400"></i></div><p class="text-gray-600 mb-4">"PharmaSaaS has transformed our pharmacy operations. The POS system is incredibly fast and the M-Pesa integration is seamless."</p><div class="flex items-center"><div class="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center mr-3"><i class="fas fa-user text-purple-600"></i></div><div><p class="font-semibold">Dr. Sarah Kimani</p><p class="text-sm text-gray-500">Nairobi Pharmacy</p></div></div></div>
+            <div class="bg-white rounded-xl shadow-lg p-6"><div class="flex items-center mb-4"><i class="fas fa-star text-yellow-400"></i><i class="fas fa-star text-yellow-400"></i><i class="fas fa-star text-yellow-400"></i><i class="fas fa-star text-yellow-400"></i><i class="fas fa-star text-yellow-400"></i></div><p class="text-gray-600 mb-4">"The AI assistant is a game-changer! It helps my staff answer customer questions about medications quickly and accurately."</p><div class="flex items-center"><div class="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center mr-3"><i class="fas fa-user text-purple-600"></i></div><div><p class="font-semibold">James Otieno</p><p class="text-sm text-gray-500">Mombasa Chemists</p></div></div></div>
+            <div class="bg-white rounded-xl shadow-lg p-6"><div class="flex items-center mb-4"><i class="fas fa-star text-yellow-400"></i><i class="fas fa-star text-yellow-400"></i><i class="fas fa-star text-yellow-400"></i><i class="fas fa-star text-yellow-400"></i><i class="fas fa-star text-yellow-400"></i></div><p class="text-gray-600 mb-4">"Inventory management has never been easier. The low stock alerts save us from running out of essential medicines."</p><div class="flex items-center"><div class="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center mr-3"><i class="fas fa-user text-purple-600"></i></div><div><p class="font-semibold">Mary Wanjiku</p><p class="text-sm text-gray-500">Nakuru Pharmacy</p></div></div></div>
+        </div>
+    </div>
+
+    <!-- CTA Section -->
+    <div class="gradient-bg text-white py-16">
+        <div class="container mx-auto px-6 text-center">
+            <h2 class="text-3xl md:text-4xl font-bold mb-4">Ready to transform your pharmacy?</h2>
+            <p class="text-xl mb-8 opacity-90">Join thousands of pharmacies using PharmaSaaS to manage their operations efficiently</p>
+            <div class="flex gap-4 justify-center flex-wrap">
+                <a href="/register" class="bg-white text-purple-600 px-8 py-3 rounded-lg font-semibold hover:bg-gray-100 transition inline-flex items-center"><i class="fas fa-rocket mr-2"></i> Start Free Trial</a>
+                <a href="/login" class="border-2 border-white text-white px-8 py-3 rounded-lg font-semibold hover:bg-white hover:text-purple-600 transition inline-flex items-center"><i class="fas fa-sign-in-alt mr-2"></i> Login</a>
+            </div>
+            <p class="mt-8 text-sm opacity-75">No credit card required • 14-day free trial • Cancel anytime</p>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="bg-gray-900 text-white py-12">
+        <div class="container mx-auto px-6 text-center">
+            <div class="flex items-center justify-center mb-4"><i class="fas fa-hospital-user text-2xl mr-2"></i><span class="font-bold text-xl">PharmaSaaS</span></div>
+            <p class="text-gray-400 text-sm mb-4">Complete pharmacy management solution for modern pharmacies.</p>
+            <p class="text-gray-400 text-sm">&copy; 2025 PharmaSaaS. All rights reserved. Transform your pharmacy with intelligent management.</p>
+        </div>
+    </footer>
+</body>
+</html>
+"""
+
 @app.get("/", response_class=HTMLResponse)
 async def landing_page(request: Request):
     if request.session.get("user_id"):
         return RedirectResponse(url="/dashboard", status_code=302)
-    return templates.TemplateResponse("landing.html", {"request": request})
+    return HTMLResponse(content=LANDING_HTML)
 
 # ==================== REGISTRATION ====================
 @app.get("/register", response_class=HTMLResponse)
