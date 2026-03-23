@@ -8,22 +8,19 @@ except AttributeError:
     bcrypt.__about__ = types.SimpleNamespace()
     bcrypt.__about__.__version__ = "3.2.0"
 
-from fastapi import FastAPI, Request, Form, UploadFile, File, HTTPException, Depends, status
+from fastapi import FastAPI, Request, Form, HTTPException, Depends
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 from sqlalchemy.orm import Session
-from sqlalchemy import func, and_, or_
+from sqlalchemy import func, or_
 from passlib.context import CryptContext
-from typing import Optional, List
-import os
 from datetime import datetime, date, timedelta
-from decimal import Decimal
+import os
 import uuid
 import cohere
-import json
 import secrets
 import httpx
 
@@ -39,22 +36,17 @@ TUMA_BASE_URL = "https://tuma.ke/api/v1"
 pwd_context = CryptContext(
     schemes=["pbkdf2_sha256", "bcrypt"],
     deprecated="auto",
-    pbkdf2_sha256__default_rounds=30000,
-    pbkdf2_sha256__salt_size=16
+    pbkdf2_sha256__default_rounds=30000
 )
 
 def hash_password(password: str) -> str:
     password = str(password).strip()
     if len(password) < 6:
         raise ValueError("Password must be at least 6 characters")
-    if len(password) > 128:
-        raise ValueError("Password must be 128 characters or less")
     return pwd_context.hash(password, scheme="pbkdf2_sha256")
 
 def verify_password(password: str, hashed_password: str) -> bool:
     password = str(password).strip()
-    if len(password) > 128:
-        password = password[:128]
     if not hashed_password:
         return False
     try:
@@ -62,7 +54,7 @@ def verify_password(password: str, hashed_password: str) -> bool:
     except:
         return False
 
-# ==================== TUMA MPESA SERVICE ====================
+# ==================== SERVICES ====================
 class TumaMpesaService:
     def __init__(self):
         self.api_key = TUMA_API_KEY
@@ -113,7 +105,6 @@ class TumaMpesaService:
             except Exception as e:
                 return {"success": False, "error": str(e)}
 
-# ==================== COHERE AI SERVICE ====================
 class CohereService:
     def __init__(self):
         api_key = os.getenv("COHERE_API_KEY")
@@ -227,26 +218,20 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, 
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# FIX: Create templates with custom environment to avoid cache issues
-from jinja2 import Environment, FileSystemLoader, select_autoescape
-env = Environment(
-    loader=FileSystemLoader("templates"),
-    autoescape=select_autoescape(["html", "xml"]),
-    cache_size=0  # Disable template caching completely
-)
-templates = Jinja2Templates(env=env)  # Pass only env, not directory
+# Templates for dashboard and other pages
+templates = Jinja2Templates(directory="templates")
 
 cohere_service = CohereService()
 tuma_service = TumaMpesaService()
 
-def get_current_user(request: Request, db: Session = Depends(get_db)):
+def get_user(request: Request, db: Session):
     user_id = request.session.get("user_id")
     if not user_id:
         return None
     return db.query(models.User).filter(models.User.id == user_id).first()
 
 def require_auth(request: Request, db: Session = Depends(get_db)):
-    user = get_current_user(request, db)
+    user = get_user(request, db)
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
     return user
@@ -272,12 +257,121 @@ def create_reminder(db: Session, medication, reminder_type, message):
     db.commit()
     return reminder
 
-# ==================== PUBLIC PAGES ====================
+# ==================== LANDING PAGE (Direct HTML) ====================
+LANDING_HTML = """<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PharmaSaaS - Complete Pharmacy Management System</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .gradient-bg { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+        .card-hover { transition: transform 0.3s ease, box-shadow 0.3s ease; }
+        .card-hover:hover { transform: translateY(-5px); box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1); }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <div class="gradient-bg text-white">
+        <div class="container mx-auto px-6 py-16 text-center">
+            <i class="fas fa-hospital-user text-5xl mb-4"></i>
+            <h1 class="text-4xl md:text-5xl font-bold mb-4">PharmaSaaS</h1>
+            <p class="text-xl mb-8">Complete Pharmacy Management System for Modern Pharmacies</p>
+            <div class="flex gap-4 justify-center flex-wrap">
+                <a href="/register" class="bg-white text-purple-600 px-8 py-3 rounded-lg font-semibold hover:bg-gray-100 transition"><i class="fas fa-rocket mr-2"></i> Get Started Free</a>
+                <a href="/login" class="border-2 border-white text-white px-8 py-3 rounded-lg font-semibold hover:bg-white hover:text-purple-600 transition"><i class="fas fa-sign-in-alt mr-2"></i> Login</a>
+            </div>
+            <div class="mt-8 flex gap-6 justify-center">
+                <div class="text-center"><div class="text-2xl font-bold">500+</div><div class="text-sm">Happy Pharmacies</div></div>
+                <div class="text-center"><div class="text-2xl font-bold">10k+</div><div class="text-sm">Daily Transactions</div></div>
+                <div class="text-center"><div class="text-2xl font-bold">24/7</div><div class="text-sm">Support</div></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container mx-auto px-6 py-20">
+        <div class="text-center mb-12">
+            <h2 class="text-3xl md:text-4xl font-bold text-gray-800 mb-4">Powerful Features</h2>
+            <p class="text-xl text-gray-600">Everything you need to run your pharmacy efficiently</p>
+        </div>
+        <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+            <div class="bg-white rounded-xl shadow-lg p-6 card-hover"><div class="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mb-4"><i class="fas fa-qrcode text-2xl text-purple-600"></i></div><h3 class="text-xl font-semibold mb-2">Barcode Scanning</h3><p class="text-gray-600">Use your phone camera to scan product barcodes for instant inventory management.</p></div>
+            <div class="bg-white rounded-xl shadow-lg p-6 card-hover"><div class="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mb-4"><i class="fas fa-users text-2xl text-purple-600"></i></div><h3 class="text-xl font-semibold mb-2">Multi-User Support</h3><p class="text-gray-600">Admin and Pharmacist roles with custom permissions.</p></div>
+            <div class="bg-white rounded-xl shadow-lg p-6 card-hover"><div class="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mb-4"><i class="fas fa-credit-card text-2xl text-purple-600"></i></div><h3 class="text-xl font-semibold mb-2">Credit Management</h3><p class="text-gray-600">Manage clients with credit accounts and payment tracking.</p></div>
+            <div class="bg-white rounded-xl shadow-lg p-6 card-hover"><div class="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mb-4"><i class="fas fa-robot text-2xl text-purple-600"></i></div><h3 class="text-xl font-semibold mb-2">AI Assistant</h3><p class="text-gray-600">Built-in AI chat for drug information and dosage queries.</p></div>
+            <div class="bg-white rounded-xl shadow-lg p-6 card-hover"><div class="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mb-4"><i class="fas fa-chart-line text-2xl text-purple-600"></i></div><h3 class="text-xl font-semibold mb-2">Analytics Dashboard</h3><p class="text-gray-600">Real-time sales analytics and inventory alerts.</p></div>
+            <div class="bg-white rounded-xl shadow-lg p-6 card-hover"><div class="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mb-4"><i class="fas fa-shopping-cart text-2xl text-purple-600"></i></div><h3 class="text-xl font-semibold mb-2">Point of Sale</h3><p class="text-gray-600">Fast POS with barcode scanning and M-Pesa integration.</p></div>
+        </div>
+    </div>
+
+    <div class="bg-gray-100 py-20">
+        <div class="container mx-auto px-6">
+            <div class="text-center mb-12"><h2 class="text-3xl md:text-4xl font-bold text-gray-800 mb-4">Simple Pricing</h2><p class="text-xl text-gray-600">Choose the plan that fits your pharmacy's needs</p></div>
+            <div class="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
+                <div class="bg-white rounded-2xl shadow-lg p-8 text-center"><i class="fas fa-store text-3xl text-purple-600 mb-4"></i><h3 class="text-2xl font-bold mb-2">Starter</h3><div class="text-4xl font-bold text-purple-600 mb-4">Kes 180 <span class="text-lg text-gray-500">/month</span></div><ul class="space-y-2 mb-8 text-left"><li class="flex items-center"><i class="fas fa-check-circle text-green-500 mr-3"></i>1 Admin + 2 Pharmacists</li><li class="flex items-center"><i class="fas fa-check-circle text-green-500 mr-3"></i>Up to 500 products</li><li class="flex items-center"><i class="fas fa-check-circle text-green-500 mr-3"></i>Basic reporting</li></ul><a href="/register" class="block bg-gray-200 text-gray-700 py-3 rounded-lg font-semibold hover:bg-gray-300">Get Started</a></div>
+                <div class="bg-white rounded-2xl shadow-2xl p-8 transform scale-105 border-2 border-purple-500 relative text-center"><div class="absolute -top-4 left-1/2 transform -translate-x-1/2 bg-purple-600 text-white px-4 py-1 rounded-full text-sm font-bold">Most Popular</div><i class="fas fa-chart-line text-3xl text-purple-600 mb-4"></i><h3 class="text-2xl font-bold mb-2">Professional</h3><div class="text-4xl font-bold text-purple-600 mb-4">Kes 279 <span class="text-lg text-gray-500">/month</span></div><ul class="space-y-2 mb-8 text-left"><li class="flex items-center"><i class="fas fa-check-circle text-green-500 mr-3"></i>Unlimited users</li><li class="flex items-center"><i class="fas fa-check-circle text-green-500 mr-3"></i>Unlimited products</li><li class="flex items-center"><i class="fas fa-check-circle text-green-500 mr-3"></i>AI Assistant</li><li class="flex items-center"><i class="fas fa-check-circle text-green-500 mr-3"></i>M-Pesa Integration</li></ul><a href="/register" class="block bg-purple-600 text-white py-3 rounded-lg font-semibold hover:bg-purple-700">Get Started</a></div>
+                <div class="bg-white rounded-2xl shadow-lg p-8 text-center"><i class="fas fa-building text-3xl text-purple-600 mb-4"></i><h3 class="text-2xl font-bold mb-2">Enterprise</h3><div class="text-4xl font-bold text-purple-600 mb-4">Kes 499 <span class="text-lg text-gray-500">/month</span></div><ul class="space-y-2 mb-8 text-left"><li class="flex items-center"><i class="fas fa-check-circle text-green-500 mr-3"></i>Multiple locations</li><li class="flex items-center"><i class="fas fa-check-circle text-green-500 mr-3"></i>Custom integrations</li><li class="flex items-center"><i class="fas fa-check-circle text-green-500 mr-3"></i>24/7 phone support</li></ul><a href="/register" class="block bg-gray-200 text-gray-700 py-3 rounded-lg font-semibold hover:bg-gray-300">Contact Sales</a></div>
+            </div>
+            <div class="text-center mt-12"><p class="text-gray-600">All plans include 14-day free trial. No credit card required.</p><a href="/register" class="inline-block mt-4 text-purple-600 font-semibold hover:underline">Start your free trial →</a></div>
+        </div>
+    </div>
+
+    <div class="gradient-bg text-white py-16">
+        <div class="container mx-auto px-6 text-center">
+            <h2 class="text-3xl md:text-4xl font-bold mb-4">Ready to transform your pharmacy?</h2>
+            <p class="text-xl mb-8">Join thousands of pharmacies using PharmaSaaS to manage their operations efficiently</p>
+            <div class="flex gap-4 justify-center flex-wrap">
+                <a href="/register" class="bg-white text-purple-600 px-8 py-3 rounded-lg font-semibold hover:bg-gray-100 transition"><i class="fas fa-rocket mr-2"></i> Start Free Trial</a>
+                <a href="/login" class="border-2 border-white text-white px-8 py-3 rounded-lg font-semibold hover:bg-white hover:text-purple-600 transition"><i class="fas fa-sign-in-alt mr-2"></i> Login</a>
+            </div>
+        </div>
+    </div>
+
+    <footer class="bg-gray-900 text-white py-12 text-center">
+        <p>&copy; 2025 PharmaSaaS. All rights reserved. Transform your pharmacy with intelligent management.</p>
+    </footer>
+</body>
+</html>
+"""
+
 @app.get("/", response_class=HTMLResponse)
 async def landing_page(request: Request):
     if request.session.get("user_id"):
         return RedirectResponse(url="/dashboard", status_code=302)
-    return templates.TemplateResponse("landing.html", {"request": request})
+    return HTMLResponse(content=LANDING_HTML)
+
+# ==================== LOGIN PAGE (Direct HTML) ====================
+LOGIN_HTML = """<!DOCTYPE html>
+<html>
+<head>
+    <title>Login - PharmaSaaS</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body class="bg-gradient-to-r from-purple-600 to-indigo-600 min-h-screen flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl shadow-2xl p-8 w-full max-w-md">
+        <div class="text-center mb-8">
+            <i class="fas fa-hospital-user text-4xl text-purple-600"></i>
+            <h1 class="text-2xl font-bold mt-2">PharmaSaaS</h1>
+            <p class="text-gray-600">Login to your pharmacy</p>
+        </div>
+        {% if error %}
+        <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">{{ error }}</div>
+        {% endif %}
+        <form method="POST" action="/login">
+            <div class="mb-4"><label class="block text-gray-700 font-semibold mb-2">Email</label><input type="email" name="email" required class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"></div>
+            <div class="mb-6"><label class="block text-gray-700 font-semibold mb-2">Password</label><input type="password" name="password" required class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"></div>
+            <button type="submit" class="w-full bg-purple-600 text-white py-2 rounded-lg font-semibold hover:bg-purple-700 transition">Login</button>
+        </form>
+        <div class="mt-6 p-4 bg-gray-50 rounded-lg"><p class="font-semibold text-gray-700">Demo Credentials:</p><p class="text-sm text-gray-600">Admin: admin@demo.com / admin123</p><p class="text-sm text-gray-600">Pharmacist: pharmacist@demo.com / pharmacist123</p></div>
+        <div class="mt-6 text-center"><p class="text-gray-600">Don't have an account? <a href="/register" class="text-purple-600 font-semibold">Sign up</a></p><a href="/" class="text-gray-500 text-sm mt-2 inline-block">← Back to home</a></div>
+    </div>
+</body>
+</html>
+"""
 
 @app.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
@@ -379,7 +473,7 @@ async def dashboard(request: Request, user: models.User = Depends(require_auth),
         "medication_alerts": medication_alerts
     })
 
-# ==================== INVENTORY MANAGEMENT ====================
+# ==================== INVENTORY ====================
 @app.get("/inventory", response_class=HTMLResponse)
 async def inventory_page(request: Request, user: models.User = Depends(require_auth)):
     return templates.TemplateResponse("inventory.html", {"request": request, "user": user})
@@ -403,46 +497,10 @@ async def get_inventory(request: Request, user: models.User = Depends(require_au
     for d in drugs:
         stock = db.query(func.sum(models.InventoryBatch.quantity_on_hand)).filter(models.InventoryBatch.drug_id == d.id).scalar() or 0
         items.append({
-            "id": d.id, "name": d.name, "generic_name": d.generic_name, "manufacturer": d.manufacturer,
-            "form": d.form.value, "strength": d.strength, "strength_unit": d.strength_unit.value,
-            "price": float(d.price), "stock": int(stock), "reorder_level": d.reorder_level,
-            "barcode": d.barcode
+            "id": d.id, "name": d.name, "price": float(d.price), "stock": int(stock),
+            "reorder_level": d.reorder_level, "barcode": d.barcode
         })
-    return {"items": items, "total": total, "page": page, "limit": limit, "pages": (total + limit - 1) // limit}
-
-@app.post("/api/inventory")
-async def add_inventory(request: Request, user: models.User = Depends(require_auth), db: Session = Depends(get_db)):
-    data = await request.json()
-    org_id = request.session.get("org_id")
-    
-    try:
-        drug = models.Drug(
-            id=str(uuid.uuid4()), organization_id=org_id, name=data["name"],
-            generic_name=data.get("generic_name", ""), manufacturer=data.get("manufacturer", ""),
-            form=models.DrugFormEnum(data["form"]), strength=data.get("strength", 0),
-            strength_unit=models.StrengthUnitEnum(data.get("strength_unit", "mg")),
-            category_id=data.get("category_id"), supplier_id=data.get("supplier_id"),
-            description=data.get("description", ""), usage_instructions=data.get("usage_instructions", ""),
-            side_effects=data.get("side_effects", ""), contraindications=data.get("contraindications", ""),
-            price=data.get("price", 0), reorder_level=data.get("reorder_level", 50), barcode=data.get("barcode", "")
-        )
-        db.add(drug)
-        db.flush()
-        
-        if data.get("initial_quantity", 0) > 0:
-            db.add(models.InventoryBatch(
-                id=str(uuid.uuid4()), drug_id=drug.id, lot_number=data.get("lot_number", f"LOT-{datetime.now().strftime('%Y%m%d')}"),
-                quantity_on_hand=data["initial_quantity"],
-                expiry_date=datetime.strptime(data["expiry_date"], "%Y-%m-%d").date() if data.get("expiry_date") else None,
-                purchase_date=datetime.now().date(), cost_price=data.get("cost_price", drug.price * 0.6),
-                status=models.BatchStatusEnum.active
-            ))
-        
-        db.commit()
-        return {"success": True, "id": drug.id}
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(400, detail=str(e))
+    return {"items": items, "total": total, "pages": (total + limit - 1) // limit}
 
 # ==================== POINT OF SALE ====================
 @app.get("/sales", response_class=HTMLResponse)
@@ -456,7 +514,7 @@ async def get_product_by_barcode(code: str, request: Request, user: models.User 
     if not product:
         raise HTTPException(404, "Not found")
     stock = db.query(func.sum(models.InventoryBatch.quantity_on_hand)).filter(models.InventoryBatch.drug_id == product.id).scalar() or 0
-    return {"id": product.id, "name": product.name, "price": float(product.price), "barcode": product.barcode, "stock": int(stock)}
+    return {"id": product.id, "name": product.name, "price": float(product.price), "stock": int(stock), "barcode": product.barcode}
 
 @app.get("/api/products/search")
 async def search_products(request: Request, q: str, user: models.User = Depends(require_auth), db: Session = Depends(get_db)):
@@ -468,7 +526,7 @@ async def search_products(request: Request, q: str, user: models.User = Depends(
     result = []
     for p in products:
         stock = db.query(func.sum(models.InventoryBatch.quantity_on_hand)).filter(models.InventoryBatch.drug_id == p.id).scalar() or 0
-        result.append({"id": p.id, "name": p.name, "price": float(p.price), "stock": int(stock), "barcode": p.barcode})
+        result.append({"id": p.id, "name": p.name, "price": float(p.price), "stock": int(stock)})
     return result
 
 @app.post("/api/sales")
@@ -513,7 +571,7 @@ async def create_sale(request: Request, user: models.User = Depends(require_auth
         db.rollback()
         raise HTTPException(400, detail=str(e))
 
-# ==================== CUSTOMER MANAGEMENT ====================
+# ==================== CUSTOMERS ====================
 @app.get("/customers", response_class=HTMLResponse)
 async def customers_page(request: Request, user: models.User = Depends(require_auth)):
     return templates.TemplateResponse("customers.html", {"request": request, "user": user})
@@ -528,34 +586,13 @@ async def get_customers(request: Request, user: models.User = Depends(require_au
         query = query.filter(or_(
             models.Customer.first_name.ilike(f"%{search}%"),
             models.Customer.last_name.ilike(f"%{search}%"),
-            models.Customer.email.ilike(f"%{search}%"),
-            models.Customer.phone.ilike(f"%{search}%")
+            models.Customer.email.ilike(f"%{search}%")
         ))
     
     total = query.count()
     customers = query.offset(offset).limit(limit).all()
-    items = [{
-        "id": c.id, "first_name": c.first_name, "last_name": c.last_name, "full_name": c.full_name,
-        "email": c.email, "phone": c.phone, "address": c.address,
-        "allow_credit": c.allow_credit, "credit_limit": float(c.credit_limit) if c.credit_limit else 0,
-        "current_balance": float(c.current_balance) if c.current_balance else 0
-    } for c in customers]
-    return {"items": items, "total": total, "page": page, "limit": limit, "pages": (total + limit - 1) // limit}
-
-@app.post("/api/customers")
-async def add_customer(request: Request, user: models.User = Depends(require_auth), db: Session = Depends(get_db)):
-    data = await request.json()
-    customer = models.Customer(
-        id=str(uuid.uuid4()), organization_id=request.session.get("org_id"),
-        first_name=data["first_name"], last_name=data["last_name"], email=data.get("email", ""),
-        phone=data.get("phone", ""), address=data.get("address", ""),
-        date_of_birth=datetime.strptime(data["date_of_birth"], "%Y-%m-%d").date() if data.get("date_of_birth") else None,
-        allergies=data.get("allergies", ""), medical_conditions=data.get("medical_conditions", ""),
-        allow_credit=data.get("allow_credit", False), credit_limit=data.get("credit_limit", 0), current_balance=0
-    )
-    db.add(customer)
-    db.commit()
-    return {"success": True, "id": customer.id}
+    items = [{"id": c.id, "full_name": c.full_name, "email": c.email, "phone": c.phone, "current_balance": float(c.current_balance)} for c in customers]
+    return {"items": items, "total": total, "pages": (total + limit - 1) // limit}
 
 @app.post("/api/customers/{customer_id}/payment")
 async def add_customer_payment(customer_id: str, request: Request, user: models.User = Depends(require_auth), db: Session = Depends(get_db)):
@@ -567,7 +604,7 @@ async def add_customer_payment(customer_id: str, request: Request, user: models.
     db.commit()
     return {"success": True, "new_balance": float(customer.current_balance)}
 
-# ==================== STAFF MANAGEMENT ====================
+# ==================== STAFF ====================
 @app.get("/staff", response_class=HTMLResponse)
 async def staff_page(request: Request, user: models.User = Depends(require_role("admin"))):
     return templates.TemplateResponse("staff.html", {"request": request, "user": user})
@@ -578,20 +615,16 @@ async def get_staff(request: Request, user: models.User = Depends(require_role("
         models.User.organization_id == request.session.get("org_id"),
         models.User.role != models.UserRoleEnum.admin
     ).all()
-    return [{"id": s.id, "username": s.username, "email": s.email, "full_name": s.full_name,
-             "role": s.role.value, "is_active": s.is_active, "phone": s.phone} for s in staff]
+    return [{"id": s.id, "full_name": s.full_name, "email": s.email, "role": s.role.value, "is_active": s.is_active} for s in staff]
 
 @app.post("/api/staff")
 async def add_staff(request: Request, user: models.User = Depends(require_role("admin")), db: Session = Depends(get_db)):
     data = await request.json()
     if db.query(models.User).filter(models.User.email == data["email"]).first():
         raise HTTPException(400, "Email exists")
-    staff = models.User(
-        id=str(uuid.uuid4()), organization_id=request.session.get("org_id"),
-        username=data["username"], email=data["email"], password_hash=hash_password(data["password"]),
-        full_name=data["full_name"], role=models.UserRoleEnum(data["role"]),
-        is_active=data.get("is_active", True), phone=data.get("phone", "")
-    )
+    staff = models.User(id=str(uuid.uuid4()), organization_id=request.session.get("org_id"), username=data["username"],
+                        email=data["email"], password_hash=hash_password(data["password"]), full_name=data["full_name"],
+                        role=models.UserRoleEnum(data["role"]), is_active=True, phone=data.get("phone", ""))
     db.add(staff)
     db.commit()
     return {"success": True, "id": staff.id}
@@ -701,45 +734,20 @@ async def get_patient_medications(
     
     result = []
     for med in medications:
-        days_remaining = None
-        if med.next_refill_date:
-            days_remaining = (med.next_refill_date - date.today()).days
-        
-        needs_alert = med.quantity_remaining <= med.low_stock_threshold
-        
         result.append({
             "id": med.id,
-            "patient": {
-                "id": med.patient.id,
-                "name": med.patient.full_name,
-                "phone": med.patient.phone,
-                "email": med.patient.email
-            },
-            "drug": {
-                "id": med.drug.id,
-                "name": med.drug.name,
-                "price": float(med.drug.price)
-            },
+            "patient": {"id": med.patient.id, "name": med.patient.full_name, "phone": med.patient.phone},
+            "drug": {"id": med.drug.id, "name": med.drug.name},
             "dosage_instructions": med.dosage_instructions,
             "quantity_given": med.quantity_given,
             "quantity_remaining": med.quantity_remaining,
             "unit": med.unit,
-            "start_date": med.start_date.isoformat(),
-            "end_date": med.end_date.isoformat() if med.end_date else None,
             "next_refill_date": med.next_refill_date.isoformat() if med.next_refill_date else None,
-            "days_remaining": days_remaining,
-            "needs_alert": needs_alert,
-            "status": med.status.value if med.status else "active",
-            "notes": med.notes
+            "needs_alert": med.quantity_remaining <= med.low_stock_threshold,
+            "status": med.status.value
         })
     
-    return {
-        "items": result,
-        "total": total,
-        "page": page,
-        "limit": limit,
-        "pages": (total + limit - 1) // limit
-    }
+    return {"items": result, "total": total, "pages": (total + limit - 1) // limit}
 
 @app.post("/api/patient-medications")
 async def add_patient_medication(
@@ -780,10 +788,6 @@ async def add_patient_medication(
         db.add(medication)
         db.commit()
         
-        if medication.quantity_remaining <= medication.low_stock_threshold:
-            create_reminder(db, medication, models.ReminderTypeEnum.low_stock, 
-                           f"Low stock alert: Only {medication.quantity_remaining} {medication.unit} remaining for {medication.patient.full_name}")
-        
         return {"success": True, "id": medication.id}
         
     except Exception as e:
@@ -813,19 +817,6 @@ async def refill_medication(
         old_quantity = medication.quantity_remaining
         new_quantity = old_quantity + quantity_refilled
         
-        refill = models.MedicationRefill(
-            id=str(uuid.uuid4()),
-            medication_id=medication_id,
-            organization_id=org_id,
-            refill_date=datetime.now().date(),
-            quantity_refilled=quantity_refilled,
-            previous_quantity=old_quantity,
-            new_quantity=new_quantity,
-            notes=data.get("notes", ""),
-            created_by=user.id
-        )
-        db.add(refill)
-        
         medication.quantity_remaining = new_quantity
         medication.last_refill_date = datetime.now().date()
         
@@ -833,47 +824,6 @@ async def refill_medication(
             medication.next_refill_date = medication.end_date - timedelta(days=medication.reminder_days_before)
         
         db.commit()
-        
-        create_reminder(db, medication, models.ReminderTypeEnum.refill_due, 
-                       f"Medication refilled: {quantity_refilled} {medication.unit} added. New stock: {new_quantity} {medication.unit}")
-        
-        return {"success": True, "new_quantity": new_quantity}
-        
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(400, detail=str(e))
-
-@app.post("/api/patient-medications/{medication_id}/adjust-stock")
-async def adjust_medication_stock(
-    medication_id: str,
-    request: Request,
-    user: models.User = Depends(require_auth),
-    db: Session = Depends(get_db)
-):
-    data = await request.json()
-    org_id = request.session.get("org_id")
-    
-    medication = db.query(models.PatientMedication).filter(
-        models.PatientMedication.id == medication_id,
-        models.PatientMedication.organization_id == org_id
-    ).first()
-    
-    if not medication:
-        raise HTTPException(404, "Medication record not found")
-    
-    try:
-        new_quantity = data.get("quantity", 0)
-        reason = data.get("reason", "Manual adjustment")
-        
-        old_quantity = medication.quantity_remaining
-        medication.quantity_remaining = new_quantity
-        medication.notes = f"{medication.notes}\n[{datetime.now().strftime('%Y-%m-%d')}] Stock adjusted from {old_quantity} to {new_quantity}. Reason: {reason}"
-        
-        db.commit()
-        
-        if new_quantity <= medication.low_stock_threshold:
-            create_reminder(db, medication, models.ReminderTypeEnum.low_stock, 
-                           f"Low stock alert: Only {new_quantity} {medication.unit} remaining")
         
         return {"success": True, "new_quantity": new_quantity}
         
@@ -903,25 +853,7 @@ async def get_medication_alerts(
             "medication_id": med.id,
             "patient": med.patient.full_name,
             "drug": med.drug.name,
-            "message": f"Low stock: {med.quantity_remaining} {med.unit} remaining (threshold: {med.low_stock_threshold})",
-            "urgency": "high"
-        })
-    
-    refill_due = db.query(models.PatientMedication).filter(
-        models.PatientMedication.organization_id == org_id,
-        models.PatientMedication.status == models.MedicationStatusEnum.active,
-        models.PatientMedication.next_refill_date <= date.today(),
-        models.PatientMedication.next_refill_date.isnot(None)
-    ).all()
-    
-    for med in refill_due:
-        days_overdue = (date.today() - med.next_refill_date).days
-        alerts.append({
-            "type": "refill_due",
-            "medication_id": med.id,
-            "patient": med.patient.full_name,
-            "drug": med.drug.name,
-            "message": f"Refill overdue by {days_overdue} days",
+            "message": f"Low stock: {med.quantity_remaining} {med.unit} remaining",
             "urgency": "high"
         })
     
@@ -952,7 +884,7 @@ async def get_medication_chat(
         "id": m.id,
         "message": m.message,
         "is_from_patient": m.is_from_patient,
-        "sender_name": m.patient.full_name if m.is_from_patient else (m.user.full_name if m.user else "Pharmacy"),
+        "sender_name": m.patient.full_name if m.is_from_patient else "Pharmacy",
         "created_at": m.created_at.isoformat()
     } for m in messages]
 
@@ -993,109 +925,12 @@ async def send_medication_chat(
         db.rollback()
         raise HTTPException(400, detail=str(e))
 
-@app.get("/api/patient-reminders")
-async def get_patient_reminders(
-    request: Request,
-    user: models.User = Depends(require_auth),
-    db: Session = Depends(get_db),
-    unread_only: bool = False
-):
-    org_id = request.session.get("org_id")
-    
-    query = db.query(models.MedicationReminder).filter(
-        models.MedicationReminder.organization_id == org_id
-    )
-    
-    if unread_only:
-        query = query.filter(models.MedicationReminder.is_read == False)
-    
-    reminders = query.order_by(models.MedicationReminder.sent_at.desc()).limit(50).all()
-    
-    return [{
-        "id": r.id,
-        "patient": r.patient.full_name,
-        "drug": r.medication.drug.name,
-        "type": r.reminder_type.value if r.reminder_type else "general",
-        "message": r.message,
-        "sent_at": r.sent_at.isoformat(),
-        "is_read": r.is_read
-    } for r in reminders]
-
-@app.put("/api/patient-reminders/{reminder_id}/read")
-async def mark_reminder_read(
-    reminder_id: str,
-    request: Request,
-    user: models.User = Depends(require_auth),
-    db: Session = Depends(get_db)
-):
-    reminder = db.query(models.MedicationReminder).filter(
-        models.MedicationReminder.id == reminder_id
-    ).first()
-    
-    if not reminder:
-        raise HTTPException(404, "Reminder not found")
-    
-    reminder.is_read = True
-    reminder.read_at = datetime.now()
-    db.commit()
-    
-    return {"success": True}
-
-@app.post("/api/check-medication-alerts")
-async def check_medication_alerts(
-    request: Request,
-    user: models.User = Depends(require_auth),
-    db: Session = Depends(get_db)
-):
-    org_id = request.session.get("org_id")
-    
-    medications = db.query(models.PatientMedication).filter(
-        models.PatientMedication.organization_id == org_id,
-        models.PatientMedication.status == models.MedicationStatusEnum.active
-    ).all()
-    
-    alerts_created = 0
-    
-    for med in medications:
-        if med.quantity_remaining <= med.low_stock_threshold:
-            existing = db.query(models.MedicationReminder).filter(
-                models.MedicationReminder.medication_id == med.id,
-                models.MedicationReminder.reminder_type == models.ReminderTypeEnum.low_stock,
-                models.MedicationReminder.sent_at >= datetime.now() - timedelta(days=3)
-            ).first()
-            
-            if not existing:
-                create_reminder(db, med, models.ReminderTypeEnum.low_stock, 
-                               f"⚠️ Low stock alert: Only {med.quantity_remaining} {med.unit} remaining. Please refill soon.")
-                alerts_created += 1
-        
-        if med.next_refill_date and med.next_refill_date <= date.today():
-            existing = db.query(models.MedicationReminder).filter(
-                models.MedicationReminder.medication_id == med.id,
-                models.MedicationReminder.reminder_type == models.ReminderTypeEnum.refill_due,
-                models.MedicationReminder.sent_at >= datetime.now() - timedelta(days=3)
-            ).first()
-            
-            if not existing:
-                days_overdue = (date.today() - med.next_refill_date).days
-                create_reminder(db, med, models.ReminderTypeEnum.refill_due, 
-                               f"📅 Refill reminder: Medication refill is {days_overdue} days overdue. Please schedule a refill.")
-                alerts_created += 1
-    
-    return {"success": True, "alerts_created": alerts_created}
-
 # ==================== REPORTS ====================
 @app.get("/api/reports/sales")
-async def sales_report(request: Request, user: models.User = Depends(require_auth), db: Session = Depends(get_db), start_date: str = None, end_date: str = None):
+async def sales_report(request: Request, user: models.User = Depends(require_auth), db: Session = Depends(get_db)):
     org_id = request.session.get("org_id")
-    query = db.query(models.SalesOrder).filter(models.SalesOrder.organization_id == org_id)
-    if start_date:
-        query = query.filter(models.SalesOrder.created_at >= datetime.fromisoformat(start_date))
-    if end_date:
-        query = query.filter(models.SalesOrder.created_at <= datetime.fromisoformat(end_date))
-    sales = query.all()
-    total_sales = sum(s.total for s in sales)
-    return {"total_sales": float(total_sales), "count": len(sales)}
+    sales = db.query(models.SalesOrder).filter(models.SalesOrder.organization_id == org_id).all()
+    return {"total_sales": sum(float(s.total) for s in sales), "count": len(sales)}
 
 @app.get("/api/reports/inventory")
 async def inventory_report(request: Request, user: models.User = Depends(require_auth), db: Session = Depends(get_db)):
